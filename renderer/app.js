@@ -656,9 +656,16 @@ window.ram.onLog(({ msg, level }) => log(msg, level === 'error' ? 'error' : 'inf
 
 (async function boot() {
   bind();
-  const init = await api(window.ram.init());
+  let init;
+  try {
+    init = await api(window.ram.init());
+  } catch (e) {
+    console.error('BOOT init FAILED:', e.message);
+    log('Could not load: ' + e.message, 'error');
+    return;
+  }
   state.settings = init.settings;
-  state.accounts = init.accounts;
+  state.accounts = init.accounts || [];
 
   $('#place-id').value = state.settings.savedPlaceId || '';
   $('#job-id').value = state.settings.savedJobId || '';

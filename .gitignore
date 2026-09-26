@@ -15,4 +15,4 @@ Thumbs.db
 .DS_Store
 
 # Accounts and personal data are NEVER stored in this folder — they live in
-# %APPDATA%/roblox-account-manager-v2 — so there is nothing personal to ignore here.
+# %USERPROFILE%/.roblox-account-manager-v2 — so there is nothing personal to ignore here.

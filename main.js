@@ -7,9 +7,19 @@ const { readRamFile } = require('./src/ramImport');
 const browser = require('./src/browser');
 const launcher = require('./src/launcher');
 
-// Pin the data folder to one fixed location so the dev build and the packaged
-// app (which otherwise pick different names) share the same accounts.
-app.setPath('userData', path.join(app.getPath('appData'), 'roblox-account-manager-v2'));
+// Keep data OUT of AppData: sandboxed launchers (MSIX-packaged apps) silently
+// redirect AppData writes into their own container, which made different
+// launches see different account files. A home-folder path is never redirected.
+const LEGACY_DIR = path.join(app.getPath('appData'), 'roblox-account-manager-v2');
+const SHARED_DIR = path.join(require('os').homedir(), '.roblox-account-manager-v2');
+fs.mkdirSync(SHARED_DIR, { recursive: true });
+if (!fs.existsSync(path.join(SHARED_DIR, 'accounts.dat'))) {
+  // One-time migration from the old AppData location.
+  for (const f of ['accounts.dat', 'accounts.dat.bak', 'settings.json', 'recent-games.json']) {
+    try { if (fs.existsSync(path.join(LEGACY_DIR, f))) fs.copyFileSync(path.join(LEGACY_DIR, f), path.join(SHARED_DIR, f)); } catch { /* ignore */ }
+  }
+}
+app.setPath('userData', SHARED_DIR);
 
 const DATA_DIR = app.getPath('userData');
 const PROFILES_DIR = path.join(DATA_DIR, 'profiles');
@@ -383,13 +393,15 @@ function handle(channel, fn) {
 }
 
 function registerIpc() {
-  handle('init', () => ({
-    accounts: vault.accounts.map(publicAccount),
-    settings,
-    recent: recentGames,
-    multiRoblox: launcher.isMultiRobloxEnabled(),
-    defaultRamFile: fs.existsSync(path.join(DEFAULT_RAM_DIR, 'AccountData.json')) ? path.join(DEFAULT_RAM_DIR, 'AccountData.json') : '',
-  }));
+  handle('init', () => {
+    return {
+      accounts: vault.accounts.map(publicAccount),
+      settings,
+      recent: recentGames,
+      multiRoblox: launcher.isMultiRobloxEnabled(),
+      defaultRamFile: fs.existsSync(path.join(DEFAULT_RAM_DIR, 'AccountData.json')) ? path.join(DEFAULT_RAM_DIR, 'AccountData.json') : '',
+    };
+  });
 
   handle('settings:set', patch => {
     settings = { ...settings, ...patch };
@@ -738,7 +750,11 @@ if (!gotLock) {
 } else {
   app.on('second-instance', (_e, argv) => {
     if (argv.includes('--keepalive')) return; // app is already open, its own timer keeps sessions alive
-    if (win) { if (win.isMinimized()) win.restore(); win.focus(); }
+    if (win && !win.isDestroyed()) {
+      if (win.isMinimized()) win.restore();
+      win.show();
+      win.focus();
+    }
   });
 
   app.whenReady().then(async () => {
@@ -770,7 +786,7 @@ if (!gotLock) {
 
   app.on('before-quit', async () => {
     launcher.disableMultiRoblox();
-    if (vault) vault.saveNow();
+    if (vault) vault.flush(); // only writes if there were unsaved changes -> avoids racing a reopen's read
     await browser.closeAll();
   });
 

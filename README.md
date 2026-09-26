@@ -5,7 +5,7 @@ many Roblox accounts, launch them into games, run several clients at once, and
 keep sessions alive.
 
 > This repo contains **only the app code** — no accounts, cookies or passwords.
-> Your accounts are stored, encrypted, in `%APPDATA%/roblox-account-manager-v2`
+> Your accounts are stored, encrypted, in `%USERPROFILE%/.roblox-account-manager-v2`
 > on the machine you run it on, and never in this project.
 
 ## Run it on a new computer
@@ -52,5 +52,5 @@ No FPS unlock, no captcha-solving automation. You solve any captcha yourself.
 
 ## Data location
 
-`%APPDATA%/roblox-account-manager-v2/` — `accounts.dat` (encrypted), `settings.json`,
+`%USERPROFILE%/.roblox-account-manager-v2/` — `accounts.dat` (encrypted), `settings.json`,
 and one browser profile per account under `profiles/`.
