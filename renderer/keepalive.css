@@ -1,0 +1,7 @@
+body.ka { padding: 18px 22px; justify-content: center; }
+.ka h2 { margin: 0 0 12px; font-size: 15px; font-weight: 600; }
+.ka-bar { height: 6px; background: var(--panel-2); border-radius: 999px; overflow: hidden; }
+#ka-fill { height: 100%; width: 0; background: var(--accent); transition: width .3s; }
+#ka-fill.done { background: var(--ok); }
+#ka-fill.warn { background: var(--warn); }
+.ka p { margin: 10px 0 0; font-size: 12px; }

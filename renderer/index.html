@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' https: data:; style-src 'self'; script-src 'self'">
+  <title>Roblox Account Manager</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="layout">
+    <section class="accounts">
+      <div class="list-tools">
+        <input id="search" type="search" placeholder="Search username or alias">
+        <span id="count" class="muted"></span>
+        <button id="btn-select-all" class="small">Select all</button>
+        <button id="btn-check" class="small" title="Check which sessions still work">Check sessions</button>
+      </div>
+
+      <div class="table">
+        <div class="thead">
+          <div class="col-user">Username</div>
+          <div class="col-alias">Alias</div>
+          <div class="col-status"></div>
+        </div>
+        <div id="account-list" class="account-list"></div>
+        <div id="empty" class="empty hidden">
+          <p>No accounts yet.</p>
+          <p class="muted">Use <b>Add Account ▾ → Import from RAM</b> to bring over your old accounts.</p>
+        </div>
+      </div>
+
+      <div class="bottom-bar">
+        <div class="menu-wrap split">
+          <button id="btn-add" class="primary" title="Manual login">Add Account</button>
+          <button id="btn-add-arrow" class="primary arrow" title="More ways to add">▾</button>
+          <div class="menu hidden" id="menu-add">
+            <button data-add="manual">Manual login (browser)</button>
+            <button data-add="auto">Auto login (user:pass)</button>
+            <button data-add="cookie">Login with cookie(s)</button>
+            <button data-add="ram">Import from RAM</button>
+          </div>
+        </div>
+        <button id="btn-remove" class="danger">Remove</button>
+        <label class="check inline"><input type="checkbox" id="hide-usernames"> Hide Usernames</label>
+        <span class="grow"></span>
+        <div class="menu-wrap split">
+          <button id="btn-browser" title="Open the home page">Open Browser</button>
+          <button id="btn-browser-arrow" class="arrow" title="Open a specific page">▾</button>
+          <div class="menu hidden up-right" id="menu-browser">
+            <button data-url="https://www.roblox.com/home">Home</button>
+            <button data-url="profile">Profile</button>
+            <button data-url="https://www.roblox.com/users/friends">Friends</button>
+            <button data-url="https://www.roblox.com/my/avatar">Avatar editor</button>
+            <button data-url="https://www.roblox.com/my/account">Account settings</button>
+            <button data-url="place">Current place page</button>
+            <button data-url="custom">Custom URL…</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <aside class="side">
+      <div class="side-top">
+        <span id="multi-status" class="pill" title="Multi-Roblox lets several Roblox clients run at once">Multi-Roblox: off</span>
+        <span class="grow"></span>
+        <button id="btn-close-roblox" class="small" title="Close every Roblox client">Close all Roblox</button>
+        <button id="btn-settings" class="small">Settings</button>
+      </div>
+      <div class="card">
+        <div class="current-place">
+          <span class="muted">Current Place</span>
+          <span id="place-name">—</span>
+        </div>
+        <label>Place ID
+          <input id="place-id" placeholder="Place ID or game link">
+        </label>
+        <label>Job ID / private link
+          <div class="input-btns">
+            <input id="job-id" placeholder="Server ID or VIP / private link">
+            <button id="btn-save-place" class="icon-btn" title="Remember this Place ID and Job ID">💾</button>
+          </div>
+        </label>
+        <div class="row">
+          <button id="btn-join" class="primary grow">Join Server</button>
+          <button id="btn-servers">Servers</button>
+        </div>
+        <div class="row">
+          <input id="follow-user" class="grow" placeholder="Username to follow">
+          <button id="btn-follow">Follow</button>
+        </div>
+        <p class="muted small-text">Place ID only joins a random server. Put a VIP/private link or a server ID in the Job ID box to join a specific one.</p>
+      </div>
+
+      <div class="card">
+        <div class="row tight">
+          <input id="f-alias" class="grow" placeholder="Alias">
+          <button id="btn-set-alias">Set Alias</button>
+        </div>
+        <div class="row tight">
+          <input id="f-group" class="grow" list="group-list" placeholder="Group">
+          <datalist id="group-list"></datalist>
+          <button id="btn-set-group">Set Group</button>
+        </div>
+        <p id="edit-target" class="muted small-text">Select accounts to edit</p>
+      </div>
+
+      <div class="card" id="detail">
+        <h3 id="detail-title">No account selected</h3>
+        <div id="selected-list" class="selected-list"></div>
+        <p class="muted small-text">Right-click for join, copy, utilities and more.</p>
+      </div>
+    </aside>
+  </main>
+
+  <footer id="status" class="status"></footer>
+
+  <!-- right-click context menu -->
+  <div id="ctx-menu" class="ctx hidden"></div>
+
+  <dialog id="dlg-servers" class="dialog wide">
+    <div class="dialog-head">
+      <h3 id="servers-title">Servers</h3>
+      <button class="icon" data-close>✕</button>
+    </div>
+    <table class="servers">
+      <thead><tr><th>Players</th><th>Ping</th><th>FPS</th><th>Job ID</th><th></th></tr></thead>
+      <tbody id="servers-body"></tbody>
+    </table>
+    <div class="row end">
+      <button id="btn-servers-more">Load more</button>
+    </div>
+  </dialog>
+
+  <dialog id="dlg-settings" class="dialog">
+    <div class="dialog-head">
+      <h3>Settings</h3>
+      <button class="icon" data-close>✕</button>
+    </div>
+    <label class="check"><input type="checkbox" id="s-multiRoblox"> Multi-Roblox (run several clients at once)</label>
+    <label class="check"><input type="checkbox" id="s-closeLastOnLaunch"> Close an account's previous client before launching it again</label>
+    <label class="check"><input type="checkbox" id="s-showPresence"> Show online status</label>
+    <label class="check"><input type="checkbox" id="s-agingAlert"> Show ⏱ on accounts not launched in 20+ days</label>
+    <label class="check"><input type="checkbox" id="s-runOnStartup"> Run when Windows starts</label>
+    <label>Max Roblox clients running at once <input type="number" min="1" max="100" id="s-maxActiveClients"></label>
+    <label>Delay between accounts when launching several (seconds) <input type="number" min="0" id="s-joinDelaySec"></label>
+    <label>Online status refresh (seconds) <input type="number" min="10" id="s-presenceIntervalSec"></label>
+    <label>Refresh each session every (hours) <input type="number" min="1" id="s-keepAliveHours"></label>
+    <label class="check"><input type="checkbox" id="s-autoKeepAlive"> Open by itself to keep cookies alive when I haven't used it</label>
+    <label>…after this many days unused <input type="number" min="1" id="s-autoKeepAliveDays"></label>
+    <div class="row end"><button id="btn-settings-save" class="primary">Save</button></div>
+  </dialog>
+
+  <!-- Add accounts: auto login (user:pass) or cookies, one per line -->
+  <dialog id="dlg-batch" class="dialog">
+    <div class="dialog-head"><h3 id="batch-title"></h3><button class="icon" data-close>✕</button></div>
+    <p id="batch-hint" class="muted small-text"></p>
+    <textarea id="batch-input" rows="8" spellcheck="false"></textarea>
+    <div class="row end"><button data-close>Cancel</button><button id="batch-ok" class="primary">Add</button></div>
+  </dialog>
+
+  <!-- Account Utilities -->
+  <dialog id="dlg-utils" class="dialog">
+    <div class="dialog-head"><h3 id="utils-title">Account Utilities</h3><button class="icon" data-close>✕</button></div>
+    <div id="utils-summary" class="summary muted small-text">Loading summary…</div>
+
+    <h4>Set display name</h4>
+    <div class="row tight"><input id="u-display" class="grow" placeholder="New display name"><button id="u-display-btn">Set</button></div>
+
+    <h4>Change password</h4>
+    <div class="row tight"><input id="u-cur" class="grow" type="password" placeholder="Current password"></div>
+    <div class="row tight"><input id="u-new" class="grow" type="password" placeholder="New password"><button id="u-pass-btn">Change</button></div>
+
+    <h4>Who can join me in experiences</h4>
+    <div class="row tight">
+      <select id="u-privacy" class="grow">
+        <option value="AllUsers">Everyone</option>
+        <option value="Following">People I follow</option>
+        <option value="Friends">Friends</option>
+        <option value="NoOne">No one</option>
+      </select>
+      <button id="u-privacy-btn">Apply</button>
+    </div>
+    <p class="muted small-text">Applies to every selected account.</p>
+  </dialog>
+
+  <!-- Move to group -->
+  <dialog id="dlg-group" class="dialog narrow">
+    <div class="dialog-head"><h3>Move to group</h3><button class="icon" data-close>✕</button></div>
+    <div id="group-choices" class="group-choices"></div>
+    <div class="row tight"><input id="group-new" class="grow" placeholder="New group name"><button id="group-new-btn">Create</button></div>
+  </dialog>
+
+  <dialog id="dlg-prompt" class="dialog">
+    <div class="dialog-head"><h3 id="prompt-title"></h3></div>
+    <input id="prompt-input">
+    <div class="row end">
+      <button data-close>Cancel</button>
+      <button id="prompt-ok" class="primary">OK</button>
+    </div>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>

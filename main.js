@@ -1,0 +1,778 @@
+const { app, BrowserWindow, ipcMain, dialog, clipboard, shell } = require('electron');
+const fs = require('fs');
+const path = require('path');
+const { Vault } = require('./src/vault');
+const { RobloxClient } = require('./src/roblox');
+const { readRamFile } = require('./src/ramImport');
+const browser = require('./src/browser');
+const launcher = require('./src/launcher');
+
+// Pin the data folder to one fixed location so the dev build and the packaged
+// app (which otherwise pick different names) share the same accounts.
+app.setPath('userData', path.join(app.getPath('appData'), 'roblox-account-manager-v2'));
+
+const DATA_DIR = app.getPath('userData');
+const PROFILES_DIR = path.join(DATA_DIR, 'profiles');
+const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
+const RECENT_FILE = path.join(DATA_DIR, 'recent-games.json');
+const DEFAULT_RAM_DIR = path.join(app.getPath('downloads'), 'Roblox.Account.Manager.3.6.1', 'Roblox Account Manager');
+
+const DEFAULT_SETTINGS = {
+  multiRoblox: true,
+  closeLastOnLaunch: true,
+  joinDelaySec: 8,
+  shuffleJobId: false,
+  showPresence: true,
+  presenceIntervalSec: 20,
+  keepAliveHours: 12,
+  maxRecentGames: 30,
+  savedPlaceId: '',
+  savedJobId: '',
+  savedFollowUser: '',
+  agingAlert: true,
+  maxActiveClients: 20,
+  runOnStartup: false,
+  autoKeepAlive: true,
+  autoKeepAliveDays: 14,
+  lastActiveAt: null,
+};
+
+const KEEPALIVE_MODE = process.argv.includes('--keepalive');
+const TASK_NAME = 'RobloxAccountManagerV2 KeepAlive';
+
+let win;
+let vault;
+let settings = { ...DEFAULT_SETTINGS };
+let recentGames = [];
+const clients = new Map(); // account id -> RobloxClient
+let presenceTimer;
+let keepAliveTimer;
+
+// ---------- persistence helpers ----------
+
+function readJson(file, fallback) {
+  try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return fallback; }
+}
+function writeJson(file, data) {
+  fs.writeFileSync(file, JSON.stringify(data, null, 2));
+}
+function saveSettings() { writeJson(SETTINGS_FILE, settings); }
+function saveRecent() { writeJson(RECENT_FILE, recentGames); }
+
+function send(channel, payload) {
+  if (win && !win.isDestroyed()) win.webContents.send(channel, payload);
+}
+
+/** What the renderer is allowed to see. Cookies and passwords never leave the main process unless copied. */
+function publicAccount(a) {
+  return {
+    id: a.id,
+    userId: a.userId,
+    username: a.username,
+    displayName: a.displayName,
+    alias: a.alias,
+    description: a.description,
+    group: a.group,
+    valid: a.valid,
+    hasPassword: !!a.password,
+    lastUse: a.lastUse,
+    addedAt: a.addedAt,
+    cookieUpdatedAt: a.cookieUpdatedAt,
+    avatarUrl: a.avatarUrl || '',
+  };
+}
+function pushAccounts() {
+  send('accounts', vault.accounts.map(publicAccount));
+}
+
+function log(msg, level = 'info') {
+  send('log', { msg, level, at: Date.now() });
+  (level === 'error' ? console.error : console.log)(msg);
+}
+
+// ---------- Roblox clients with cookie rotation ----------
+
+function clientFor(acc) {
+  let c = clients.get(acc.id);
+  if (!c || c.cookie !== acc.cookie) {
+    c = new RobloxClient(acc.cookie, newCookie => {
+      vault.update(acc.id, { cookie: newCookie, cookieUpdatedAt: new Date().toISOString(), valid: true });
+      log(`Saved refreshed cookie for ${acc.username}`);
+    });
+    clients.set(acc.id, c);
+  }
+  return c;
+}
+
+function anyValidClient() {
+  const acc = vault.accounts.find(a => a.valid);
+  return acc ? clientFor(acc) : new RobloxClient('');
+}
+
+async function checkAccount(acc) {
+  try {
+    const user = await clientFor(acc).getAuthenticatedUser();
+    vault.update(acc.id, {
+      valid: true,
+      userId: user.id,
+      username: user.name,
+      displayName: user.displayName,
+      lastChecked: new Date().toISOString(),
+    });
+    return true;
+  } catch (e) {
+    if (e.status === 401) {
+      vault.update(acc.id, { valid: false, lastChecked: new Date().toISOString() });
+      log(`${acc.username}: session expired, log in again to fix it`, 'error');
+      return false;
+    }
+    log(`${acc.username}: check failed (${e.message})`, 'error');
+    return null;
+  }
+}
+
+async function refreshAvatars() {
+  try {
+    const ids = vault.accounts.filter(a => a.userId).map(a => a.userId);
+    const urls = await anyValidClient().getAvatarHeadshots(ids);
+    for (const a of vault.accounts) if (urls[a.userId]) a.avatarUrl = urls[a.userId];
+    vault.save();
+    pushAccounts();
+  } catch (e) {
+    log(`Could not load avatars: ${e.message}`, 'error');
+  }
+}
+
+/** Touch each account's session so Roblox can hand us rotated cookies before old ones are retired. */
+async function keepAlive(force = false, onProgress) {
+  const cutoff = Date.now() - settings.keepAliveHours * 3600 * 1000;
+  const due = vault.accounts.filter(a => force || !a.lastChecked || Date.parse(a.lastChecked) < cutoff);
+  for (let i = 0; i < due.length; i++) {
+    if (onProgress) onProgress(i, due.length, due[i].username);
+    await checkAccount(due[i]);
+    pushAccounts();
+    await new Promise(r => setTimeout(r, 1500));
+  }
+  markActive();
+  return due.length;
+}
+
+function markActive() {
+  settings.lastActiveAt = new Date().toISOString();
+  saveSettings();
+}
+
+// ---------- scheduled keep-alive ----------
+// A per-user Windows scheduled task starts the app with --keepalive daily and
+// at logon. In that mode it quits silently unless the app has gone unused for
+// autoKeepAliveDays, in which case it shows a small progress window.
+
+function psRun(script) {
+  const encoded = Buffer.from(script, 'utf16le').toString('base64');
+  return new Promise(resolve => {
+    require('child_process').execFile('powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded],
+      { windowsHide: true },
+      (err, _out, stderr) => resolve(err ? (stderr || err.message).trim() : ''));
+  });
+}
+
+async function syncScheduledTask() {
+  if (!settings.autoKeepAlive) {
+    await psRun(`Unregister-ScheduledTask -TaskName '${TASK_NAME}' -Confirm:$false -ErrorAction SilentlyContinue`);
+    return;
+  }
+  const exe = process.execPath.replace(/'/g, "''");
+  const args = (app.isPackaged ? '--keepalive' : `"${app.getAppPath()}" --keepalive`).replace(/'/g, "''");
+  const err = await psRun(`
+$a = New-ScheduledTaskAction -Execute '${exe}' -Argument '${args}'
+$t = @((New-ScheduledTaskTrigger -Daily -At 12:00pm), (New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME))
+$s = New-ScheduledTaskSettingsSet -StartWhenAvailable -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Hours 1)
+Register-ScheduledTask -TaskName '${TASK_NAME}' -Action $a -Trigger $t -Settings $s -Description 'Keeps saved Roblox sessions from expiring when the account manager has not been opened for a while.' -Force | Out-Null
+`);
+  if (err) log(`Could not set up automatic keep-alive: ${err}`, 'error');
+}
+
+function syncLoginItem() {
+  try {
+    app.setLoginItemSettings(
+      app.isPackaged
+        ? { openAtLogin: !!settings.runOnStartup }
+        : { openAtLogin: !!settings.runOnStartup, path: process.execPath, args: [app.getAppPath()] },
+    );
+  } catch (e) {
+    log(`Could not change the startup setting: ${e.message}`, 'error');
+  }
+}
+
+function keepAliveDue() {
+  const last = Date.parse(settings.lastActiveAt || 0) || 0;
+  return Date.now() - last >= settings.autoKeepAliveDays * 24 * 3600 * 1000;
+}
+
+async function runKeepAliveMode() {
+  if (!keepAliveDue() || !vault.accounts.length) return app.quit();
+
+  win = new BrowserWindow({
+    width: 420,
+    height: 170,
+    resizable: false,
+    maximizable: false,
+    backgroundColor: '#0f1115',
+    title: 'Roblox Account Manager',
+    icon: path.join(__dirname, 'assets', process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
+    autoHideMenuBar: true,
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true },
+  });
+  await win.loadFile(path.join(__dirname, 'renderer', 'keepalive.html'));
+
+  await keepAlive(true, (i, total, name) => send('keepalive', { i, total, name }));
+  const dead = vault.accounts.filter(a => !a.valid).length;
+  vault.saveNow();
+  send('keepalive', { done: true, total: vault.accounts.length, dead });
+  setTimeout(() => app.quit(), dead ? 15000 : 4000);
+}
+
+async function pollPresence() {
+  if (!settings.showPresence) return;
+  const ids = vault.accounts.filter(a => a.userId && a.valid).map(a => a.userId);
+  if (!ids.length) return;
+  try {
+    const out = {};
+    for (let i = 0; i < ids.length; i += 50) {
+      const list = await anyValidClient().getPresence(ids.slice(i, i + 50));
+      for (const p of list) out[p.userId] = p;
+    }
+    send('presence', out);
+  } catch (e) {
+    console.error('presence', e.message);
+  }
+}
+
+function restartTimers() {
+  clearInterval(presenceTimer);
+  clearInterval(keepAliveTimer);
+  presenceTimer = setInterval(pollPresence, Math.max(10, settings.presenceIntervalSec) * 1000);
+  keepAliveTimer = setInterval(() => keepAlive(false), 60 * 60 * 1000);
+}
+
+// ---------- joining games ----------
+
+const JOB_GUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Works out where to join from the Place ID and Job ID fields.
+ * The Job ID field is the priority: it holds private/share links or a server ID.
+ *   - Job field with a private/share link  -> that private server (place taken from the link)
+ *   - Job field with a plain server GUID    -> that exact server (needs a Place ID)
+ *   - Job field empty, Place ID present     -> a random public server
+ *   - Both empty                            -> nothing
+ * Returns { placeId, jobId, linkCode, shareCode } or null when there's nothing to join.
+ */
+function parseTarget(placeInput, jobInput) {
+  const place = String(placeInput || '').trim();
+  const job = String(jobInput || '').trim();
+  const t = { placeId: 0, jobId: '', linkCode: '', shareCode: '' };
+
+  const placeIdIn = s => s.match(/games\/(\d+)/i)?.[1] || (/^\d+$/.test(s) ? s : '');
+  if (placeIdIn(place)) t.placeId = Number(placeIdIn(place));
+
+  // The Job ID field: link, share code, or a server GUID.
+  const share = job.match(/share\?[^ ]*\bcode=([\w-]+)/i) || job.match(/[?&]code=([\w-]+)/i);
+  const link = job.match(/privateServerLinkCode=([\w-]+)/i);
+  if (share) t.shareCode = share[1];
+  else if (link) t.linkCode = link[1];
+  else if (JOB_GUID.test(job)) t.jobId = job;
+  else if (job) throw new Error('The Job ID box needs a server ID or a private/VIP server link');
+
+  const jobPlace = job.match(/games\/(\d+)/i)?.[1];
+  if (jobPlace) t.placeId = Number(jobPlace); // a link in the Job box carries its own place
+
+  if (!t.placeId && !t.linkCode && !t.shareCode) return null;
+  return t;
+}
+
+async function pickRandomServer(client, placeId) {
+  let cursor = '';
+  const servers = [];
+  for (let page = 0; page < 3; page++) {
+    const d = await client.getServers(placeId, cursor);
+    servers.push(...(d?.data ?? []).filter(s => s.playing < s.maxPlayers));
+    cursor = d?.nextPageCursor;
+    if (!cursor) break;
+  }
+  if (!servers.length) return '';
+  return servers[Math.floor(Math.random() * servers.length)].id;
+}
+
+async function addRecentGame(placeId) {
+  if (!placeId) return;
+  let entry = recentGames.find(g => g.placeId === placeId);
+  if (!entry) {
+    entry = { placeId, name: `Place ${placeId}`, iconUrl: '' };
+    try {
+      const d = await anyValidClient().getPlaceDetails(placeId);
+      if (d?.name) entry.name = d.name;
+      entry.iconUrl = (await anyValidClient().getPlaceIcon(placeId)) || '';
+    } catch { /* keep placeholder name */ }
+  }
+  recentGames = [entry, ...recentGames.filter(g => g.placeId !== placeId)].slice(0, settings.maxRecentGames);
+  saveRecent();
+  send('recent', recentGames);
+}
+
+async function joinWith(acc, opts) {
+  const client = clientFor(acc);
+
+  if (settings.closeLastOnLaunch) {
+    const n = await launcher.closeClientsFor(acc.browserTrackerId).catch(() => 0);
+    if (n) log(`${acc.username}: closed previous client`);
+  }
+
+  const launch = { browserTrackerId: acc.browserTrackerId };
+
+  if (opts.followUser) {
+    const userId = /^\d+$/.test(opts.followUser) ? Number(opts.followUser) : await client.getUserIdByName(opts.followUser);
+    Object.assign(launch, { mode: 'follow', userId });
+  } else {
+    const t = parseTarget(opts.placeId, opts.jobId);
+    if (!t) throw new Error('Enter a Place ID, or a private/VIP server link in the Job ID box');
+
+    if (t.shareCode) {
+      const r = await client.resolveShareLink(t.shareCode);
+      t.placeId = r.placeId;
+      t.linkCode = r.linkCode;
+    }
+    if (!t.placeId) throw new Error('Could not work out the place for that link');
+
+    if (t.linkCode) {
+      const accessCode = await client.resolvePrivateServerLink(t.placeId, t.linkCode);
+      Object.assign(launch, { mode: 'private', placeId: t.placeId, accessCode, linkCode: t.linkCode });
+    } else if (t.jobId) {
+      Object.assign(launch, { mode: 'job', placeId: t.placeId, jobId: t.jobId });
+    } else {
+      // Place ID only -> a random public server (falls back to normal matchmaking).
+      const jobId = await pickRandomServer(client, t.placeId).catch(() => '');
+      Object.assign(launch, jobId ? { mode: 'job', placeId: t.placeId, jobId } : { mode: 'game', placeId: t.placeId });
+    }
+  }
+
+  launch.ticket = await client.getAuthTicket();
+  await launcher.launchUri(launcher.buildLaunchUri(launch));
+  vault.update(acc.id, { lastUse: new Date().toISOString() });
+  log(`${acc.username}: launching`);
+}
+
+async function ensureMultiRoblox() {
+  if (!settings.multiRoblox || launcher.isMultiRobloxEnabled()) return;
+  const r = await launcher.enableMultiRoblox();
+  if (!r.owned) log('Multi-Roblox could not start: another program already holds the Roblox lock. This is usually the old Roblox Account Manager (close it) or an open Roblox client. It will retry on your next launch.', 'error');
+}
+
+// ---------- IPC ----------
+
+function handle(channel, fn) {
+  ipcMain.handle(channel, async (_e, ...args) => {
+    try {
+      return { ok: true, data: await fn(...args) };
+    } catch (e) {
+      log(e.message, 'error');
+      return { ok: false, error: e.message };
+    }
+  });
+}
+
+function registerIpc() {
+  handle('init', () => ({
+    accounts: vault.accounts.map(publicAccount),
+    settings,
+    recent: recentGames,
+    multiRoblox: launcher.isMultiRobloxEnabled(),
+    defaultRamFile: fs.existsSync(path.join(DEFAULT_RAM_DIR, 'AccountData.json')) ? path.join(DEFAULT_RAM_DIR, 'AccountData.json') : '',
+  }));
+
+  handle('settings:set', patch => {
+    settings = { ...settings, ...patch };
+    saveSettings();
+    restartTimers();
+    if ('autoKeepAlive' in patch) syncScheduledTask();
+    if ('runOnStartup' in patch) syncLoginItem();
+    if ('multiRoblox' in patch) {
+      if (patch.multiRoblox) ensureMultiRoblox();
+      else launcher.disableMultiRoblox();
+    }
+    return settings;
+  });
+
+  handle('account:add', async () => {
+    log('Log in to Roblox in the window that opened');
+    const r = await browser.login(PROFILES_DIR);
+    if (!r) return null;
+    const acc = vault.upsert({
+      userId: r.user.id,
+      username: r.user.name,
+      displayName: r.user.displayName,
+      cookie: r.cookie,
+      password: r.password,
+      profileDir: r.profileDir,
+      valid: true,
+      cookieUpdatedAt: new Date().toISOString(),
+      lastChecked: new Date().toISOString(),
+    });
+    log(`Added ${acc.username}`);
+    pushAccounts();
+    refreshAvatars();
+    return publicAccount(acc);
+  });
+
+  handle('account:relogin', async id => {
+    const acc = vault.get(id);
+    log(`Log in as ${acc.username} in the window that opened`);
+    const r = await browser.login(PROFILES_DIR, { username: acc.username, password: acc.password });
+    if (!r) return null;
+    if (r.user.id !== acc.userId) throw new Error(`You logged in as ${r.user.name}, not ${acc.username}. Nothing was changed.`);
+    vault.update(id, { cookie: r.cookie, password: r.password || acc.password, profileDir: r.profileDir, valid: true, cookieUpdatedAt: new Date().toISOString(), lastChecked: new Date().toISOString() });
+    log(`${acc.username}: logged in again`);
+    pushAccounts();
+    return true;
+  });
+
+  handle('account:browser', async (id, url) => {
+    const acc = vault.get(id);
+    if (!acc.profileDir) vault.update(id, { profileDir: path.join(PROFILES_DIR, acc.id) });
+    await browser.openAccount(acc, acc.profileDir, cookie => {
+      vault.update(id, { cookie, cookieUpdatedAt: new Date().toISOString() });
+      log(`${acc.username}: saved refreshed cookie from browser`);
+    }, url);
+  });
+
+  handle('account:update', (id, patch) => {
+    const allowed = ['alias', 'description', 'group'];
+    const clean = Object.fromEntries(Object.entries(patch).filter(([k]) => allowed.includes(k)));
+    vault.update(id, clean);
+    pushAccounts();
+  });
+
+  handle('account:updateMany', (ids, patch) => {
+    const allowed = ['alias', 'description', 'group'];
+    const clean = Object.fromEntries(Object.entries(patch).filter(([k]) => allowed.includes(k)));
+    for (const id of ids) vault.update(id, clean);
+    pushAccounts();
+  });
+
+  async function addOneCookie(raw) {
+    const cookie = String(raw || '').trim().replace(/^\.ROBLOSECURITY=/, '');
+    if (!cookie) return { ok: false, error: 'empty' };
+    const user = await new RobloxClient(cookie).getAuthenticatedUser().catch(() => null);
+    if (!user?.id) return { ok: false, error: 'invalid or expired' };
+    const acc = vault.upsert({
+      userId: user.id, username: user.name, displayName: user.displayName, cookie, valid: true,
+      cookieUpdatedAt: new Date().toISOString(), lastChecked: new Date().toISOString(),
+    });
+    return { ok: true, username: acc.username };
+  }
+
+  // Add one or many cookies, one per line.
+  handle('account:addCookies', async text => {
+    const lines = String(text || '').split('\n').map(l => l.trim()).filter(Boolean);
+    if (!lines.length) throw new Error('Paste at least one cookie');
+    let added = 0;
+    for (const line of lines) {
+      const r = await addOneCookie(line);
+      if (r.ok) { added++; log(`Added ${r.username}`); }
+      else log(`Skipped a cookie (${r.error})`, 'error');
+    }
+    pushAccounts();
+    refreshAvatars();
+    return { added, total: lines.length };
+  });
+
+  // Open a login window per "user:pass" line (or blank line = manual login). Sequential.
+  handle('account:addLogins', async text => {
+    const lines = String(text || '').split('\n').map(l => l.trim()).filter(Boolean);
+    const creds = lines.length ? lines : [''];
+    let added = 0;
+    for (const line of creds) {
+      const idx = line.indexOf(':');
+      const username = idx > -1 ? line.slice(0, idx) : line;
+      const password = idx > -1 ? line.slice(idx + 1) : '';
+      log(username ? `Logging in ${username} — solve any captcha in the window` : 'Log in in the window that opened');
+      try {
+        const r = await browser.login(PROFILES_DIR, { username, password });
+        if (!r) { log('Login window closed, skipped'); continue; }
+        vault.upsert({
+          userId: r.user.id, username: r.user.name, displayName: r.user.displayName,
+          cookie: r.cookie, password: r.password, profileDir: r.profileDir, valid: true,
+          cookieUpdatedAt: new Date().toISOString(), lastChecked: new Date().toISOString(),
+        });
+        added++;
+        log(`Added ${r.user.name}`);
+        pushAccounts();
+      } catch (e) { log(`Login failed: ${e.message}`, 'error'); }
+    }
+    refreshAvatars();
+    return { added, total: creds.length };
+  });
+
+  handle('account:summary', async id => {
+    const acc = vault.get(id);
+    return clientFor(acc).getSummary(acc.userId);
+  });
+
+  handle('account:setDisplayName', async (ids, name) => {
+    let ok = 0;
+    for (const id of ids) {
+      const acc = vault.get(id);
+      try { await clientFor(acc).setDisplayName(acc.userId, name); vault.update(id, { displayName: name }); ok++; log(`${acc.username}: display name set`); }
+      catch (e) { log(`${acc.username}: ${e.message}`, 'error'); }
+    }
+    pushAccounts();
+    return ok;
+  });
+
+  handle('account:changePassword', async (ids, current, next) => {
+    let ok = 0;
+    for (const id of ids) {
+      const acc = vault.get(id);
+      // Blank "current" field means: use each account's saved password.
+      const cur = current || acc.password;
+      if (!cur) { log(`${acc.username}: no current password known, skipped`, 'error'); continue; }
+      try {
+        await clientFor(acc).changePassword(cur, next);
+        vault.update(id, { password: next }); // Roblox rotates the cookie; the client already captured it.
+        ok++;
+        log(`${acc.username}: password changed`);
+      } catch (e) { log(`${acc.username}: ${e.message}`, 'error'); }
+    }
+    pushAccounts();
+    return ok;
+  });
+
+  handle('account:setJoinPrivacy', async (ids, value) => {
+    for (const id of ids) {
+      const acc = vault.get(id);
+      try { await clientFor(acc).setJoinPrivacy(value); log(`${acc.username}: join privacy set to ${value}`); }
+      catch (e) { log(`${acc.username}: ${e.message}`, 'error'); }
+    }
+    return true;
+  });
+
+  handle('place:info', async placeId => {
+    const d = await anyValidClient().getPlaceDetails(Number(placeId));
+    return d ? { name: d.name, builder: d.builder } : null;
+  });
+
+  handle('account:setPassword', (id, password) => {
+    vault.update(id, { password });
+    pushAccounts();
+  });
+
+  handle('account:remove', async ids => {
+    const ok = await dialog.showMessageBox(win, {
+      type: 'warning',
+      buttons: ['Remove', 'Cancel'],
+      defaultId: 1,
+      message: `Remove ${ids.length} account${ids.length > 1 ? 's' : ''}?`,
+      detail: 'This only removes them from this app. The Roblox accounts are not affected.',
+    });
+    if (ok.response !== 0) return false;
+    for (const id of ids) vault.remove(id);
+    pushAccounts();
+    return true;
+  });
+
+  handle('account:reorder', ids => { vault.reorder(ids); pushAccounts(); });
+
+  handle('account:copy', (id, what) => {
+    const acc = vault.get(id);
+    const value = {
+      username: acc.username,
+      password: acc.password,
+      cookie: acc.cookie,
+      userId: String(acc.userId),
+      combo: acc.password ? `${acc.username}:${acc.password}` : '',
+    }[what];
+    if (!value) throw new Error(`No ${what === 'combo' ? 'password' : what} saved for ${acc.username}`);
+    clipboard.writeText(value);
+    return true;
+  });
+
+  // Copy a field from several accounts at once, one per line (e.g. user:pass combos).
+  handle('account:copyMany', (ids, what) => {
+    const lines = ids.map(id => {
+      const acc = vault.get(id);
+      if (!acc) return '';
+      return { username: acc.username, password: acc.password, cookie: acc.cookie, userId: String(acc.userId), combo: acc.password ? `${acc.username}:${acc.password}` : '' }[what] || '';
+    }).filter(Boolean);
+    if (!lines.length) throw new Error('Nothing to copy');
+    clipboard.writeText(lines.join('\n'));
+    return lines.length;
+  });
+
+  handle('account:check', async ids => {
+    for (const id of ids) {
+      const acc = vault.get(id);
+      if (acc) await checkAccount(acc);
+      pushAccounts();
+    }
+  });
+
+  handle('join', async ({ ids, placeId, jobId, followUser }) => {
+    await ensureMultiRoblox();
+    const accounts = ids.map(id => vault.get(id)).filter(Boolean);
+    const max = Math.max(1, settings.maxActiveClients || 20);
+    for (let i = 0; i < accounts.length; i++) {
+      // Cap how many Roblox clients run at once.
+      for (let waited = 0; (await launcher.countRobloxClients().catch(() => 0)) >= max; waited += 3) {
+        if (waited === 0) log(`Reached the ${max}-client limit — waiting for a client to close before launching ${accounts[i].username}`);
+        if (waited >= 120) { log(`Still at the ${max}-client limit after 2 min; stopping. Raise the limit in Settings or close some clients.`, 'error'); pushAccounts(); return; }
+        await new Promise(r => setTimeout(r, 3000));
+      }
+      try {
+        await joinWith(accounts[i], { placeId, jobId, followUser });
+      } catch (e) {
+        log(`${accounts[i].username}: ${e.message}`, 'error');
+        if (e.status === 401) { vault.update(accounts[i].id, { valid: false }); pushAccounts(); }
+      }
+      if (i < accounts.length - 1) await new Promise(r => setTimeout(r, settings.joinDelaySec * 1000));
+    }
+    pushAccounts();
+  });
+
+  handle('servers', async ({ placeId, cursor }) => {
+    const client = anyValidClient();
+    const [page, details] = await Promise.all([
+      client.getServers(Number(placeId), cursor || ''),
+      cursor ? null : client.getPlaceDetails(Number(placeId)).catch(() => null),
+    ]);
+    return { ...page, name: details?.name };
+  });
+
+  handle('recent:remove', placeId => {
+    recentGames = recentGames.filter(g => g.placeId !== placeId);
+    saveRecent();
+    return recentGames;
+  });
+
+  handle('import:pick', async () => {
+    const r = await dialog.showOpenDialog(win, {
+      title: 'Select RAM AccountData.json',
+      defaultPath: DEFAULT_RAM_DIR,
+      filters: [{ name: 'RAM account data', extensions: ['json', 'backup'] }],
+      properties: ['openFile'],
+    });
+    return r.canceled ? '' : r.filePaths[0];
+  });
+
+  handle('import:ram', async file => {
+    const list = await readRamFile(file);
+    let added = 0;
+    let updated = 0;
+    for (const a of list) {
+      const exists = a.userId && vault.findByUserId(a.userId);
+      vault.upsert(a);
+      exists ? updated++ : added++;
+    }
+
+    // Bring over RAM's recent games list and a few settings if they're next to it.
+    const dir = path.dirname(file);
+    const ramRecent = readJson(path.join(dir, 'RecentGames.json'), []);
+    for (const g of ramRecent) {
+      const d = g?.Details;
+      if (d?.placeId && !recentGames.some(r => r.placeId === d.placeId)) recentGames.push({ placeId: d.placeId, name: d.name || `Place ${d.placeId}`, iconUrl: '' });
+    }
+    recentGames = recentGames.slice(0, settings.maxRecentGames);
+    saveRecent();
+    send('recent', recentGames);
+
+    vault.saveNow();
+    pushAccounts();
+    log(`Imported ${added} new and updated ${updated} accounts from RAM. Checking which sessions still work...`);
+    keepAlive(true).then(() => {
+      const dead = vault.accounts.filter(a => !a.valid).length;
+      log(dead ? `Done. ${dead} account(s) need "Log in again".` : 'Done. All sessions work.');
+      refreshAvatars();
+    });
+    return { added, updated };
+  });
+
+  handle('open:external', url => {
+    if (/^https:\/\/(www\.)?roblox\.com\//.test(url)) shell.openExternal(url);
+  });
+
+  handle('roblox:closeAll', async () => {
+    const out = await launcher.countRobloxClients();
+    require('child_process').exec('taskkill /IM RobloxPlayerBeta.exe /F');
+    return out;
+  });
+}
+
+// ---------- app lifecycle ----------
+
+function createWindow() {
+  // Give the app its own taskbar identity so Windows uses our icon, not electron.exe's.
+  if (process.platform === 'win32') app.setAppUserModelId('com.ic3.robloxaccountmanager.v2');
+  win = new BrowserWindow({
+    width: 900,
+    height: 480,
+    minWidth: 820,
+    minHeight: 420,
+    backgroundColor: '#0f1115',
+    title: 'Roblox Account Manager',
+    icon: path.join(__dirname, 'assets', process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
+    autoHideMenuBar: true,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+  win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+  if (process.platform === 'win32') win.setIcon(path.join(__dirname, 'assets', 'icon.ico'));
+}
+
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  app.quit();
+} else {
+  app.on('second-instance', (_e, argv) => {
+    if (argv.includes('--keepalive')) return; // app is already open, its own timer keeps sessions alive
+    if (win) { if (win.isMinimized()) win.restore(); win.focus(); }
+  });
+
+  app.whenReady().then(async () => {
+    fs.mkdirSync(PROFILES_DIR, { recursive: true });
+    settings = { ...DEFAULT_SETTINGS, ...readJson(SETTINGS_FILE, {}) };
+    recentGames = readJson(RECENT_FILE, []);
+    vault = new Vault(DATA_DIR);
+    vault.load();
+
+    if (KEEPALIVE_MODE) {
+      runKeepAliveMode();
+      return;
+    }
+
+    markActive();
+    syncScheduledTask();
+    syncLoginItem();
+    registerIpc();
+    createWindow();
+    restartTimers();
+
+    if (settings.multiRoblox) ensureMultiRoblox();
+    win.webContents.once('did-finish-load', () => {
+      pollPresence();
+      keepAlive(false);
+      if (vault.accounts.some(a => !a.avatarUrl)) refreshAvatars();
+    });
+  });
+
+  app.on('before-quit', async () => {
+    launcher.disableMultiRoblox();
+    if (vault) vault.saveNow();
+    await browser.closeAll();
+  });
+
+  app.on('window-all-closed', () => app.quit());
+}

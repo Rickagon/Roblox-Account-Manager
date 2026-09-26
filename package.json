@@ -1,0 +1,49 @@
+{
+  "name": "roblox-account-manager-v2",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Modern Roblox account manager",
+  "author": "RAM v2",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "pack": "electron-packager . \"Roblox Account Manager\" --platform=win32 --arch=x64 --icon=assets/icon.ico --out=dist --overwrite --app-version=1.0.0",
+    "dist": "electron-builder"
+  },
+  "build": {
+    "appId": "com.ic3.robloxaccountmanager.v2",
+    "productName": "Roblox Account Manager",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "src/**/*",
+      "renderer/**/*",
+      "assets/**/*"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "assets/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Roblox Account Manager"
+    }
+  },
+  "devDependencies": {
+    "@electron/packager": "^20.3.0",
+    "electron": "^44.4.5",
+    "electron-builder": "^25.1.8"
+  },
+  "dependencies": {
+    "playwright-core": "^1.63.0",
+    "playwright-extra": "^4.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2"
+  }
+}
