@@ -406,7 +406,7 @@ function registerIpc() {
   handle('settings:set', patch => {
     settings = { ...settings, ...patch };
     saveSettings();
-    restartTimers();
+    if ('presenceIntervalSec' in patch || 'showPresence' in patch) restartTimers();
     if ('autoKeepAlive' in patch) syncScheduledTask();
     if ('runOnStartup' in patch) syncLoginItem();
     if ('multiRoblox' in patch) {

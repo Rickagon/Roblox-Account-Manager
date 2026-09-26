@@ -367,6 +367,18 @@ function updatePlaceName() {
   }, 400);
 }
 
+// Remember the Place ID, Job ID / link and follow username across restarts.
+let saveTargetsTimer;
+function saveTargets(now = false) {
+  clearTimeout(saveTargetsTimer);
+  const write = () => window.ram.setSettings({
+    savedPlaceId: $('#place-id').value.trim(),
+    savedJobId: $('#job-id').value.trim(),
+    savedFollowUser: $('#follow-user').value.trim(),
+  }).then(r => { if (r.ok) state.settings = r.data; });
+  if (now) write(); else saveTargetsTimer = setTimeout(write, 300);
+}
+
 function updateMultiStatus() {
   const on = state.settings.multiRoblox;
   $('#multi-status').textContent = `Multi-Roblox: ${on ? 'on' : 'off'}`;
@@ -523,7 +535,7 @@ async function loadServers() {
       el('td', {}, s.ping != null ? `${s.ping} ms` : '—'),
       el('td', {}, s.fps != null ? String(Math.round(s.fps)) : '—'),
       el('td', { class: 'mono' }, s.id),
-      el('td', {}, el('button', { class: 'small', onclick: () => { $('#job-id').value = s.id; dlg.close(); log('Server chosen, press Join Server'); } }, 'Select'))));
+      el('td', {}, el('button', { class: 'small', onclick: () => { $('#job-id').value = s.id; saveTargets(true); dlg.close(); log('Server chosen, press Join Server'); } }, 'Select'))));
   }
   dlg.dataset.cursor = data.nextPageCursor || '';
   $('#btn-servers-more').disabled = !data.nextPageCursor;
@@ -572,16 +584,15 @@ function bind() {
     log('Session check done');
   });
 
-  $('#place-id').oninput = updatePlaceName;
+  $('#place-id').oninput = () => { updatePlaceName(); saveTargets(); };
+  $('#job-id').oninput = saveTargets;
+  $('#follow-user').oninput = saveTargets;
+  for (const id of ['#place-id', '#job-id', '#follow-user']) $(id).onchange = () => saveTargets(true);
   $('#btn-join').onclick = run(doJoin);
   $('#btn-follow').onclick = run(doFollow);
   $('#follow-user').onkeydown = e => { if (e.key === 'Enter') $('#btn-follow').click(); };
   $('#btn-servers').onclick = run(openServers);
   $('#btn-servers-more').onclick = run(loadServers);
-  $('#btn-save-place').onclick = run(async () => {
-    state.settings = await api(window.ram.setSettings({ savedPlaceId: $('#place-id').value.trim(), savedJobId: $('#job-id').value.trim() }));
-    log('Place ID and Job ID saved');
-  });
 
   $('#btn-set-alias').onclick = run(() => setField('alias', $('#f-alias').value.trim()));
   $('#f-alias').onkeydown = e => { if (e.key === 'Enter') $('#btn-set-alias').click(); };
