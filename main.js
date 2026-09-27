@@ -509,7 +509,7 @@ function registerIpc() {
   function loginSlots(count) {
     const { screen } = require('electron');
     const wa = screen.getPrimaryDisplay().workArea;
-    const W = 400;                                   // tiniest width the login form still fits in
+    const W = 330;                                   // narrow; Chrome clamps to its own minimum (~360px) if this is smaller
     const h = Math.floor(wa.height / ROWS);          // three per column, top to bottom
     const maxCols = Math.max(1, Math.floor(wa.width / W));
     const n = Math.min(count, maxCols * ROWS);
