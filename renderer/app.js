@@ -112,7 +112,6 @@ function accountRow(a) {
     class: `trow${state.selected.has(a.id) ? ' selected' : ''}`,
     'data-id': a.id,
     onclick: e => onRowClick(e, a.id),
-    ondblclick: () => $('#btn-join').click(),
     oncontextmenu: e => onRowContext(e, a.id),
   },
     el('div', { class: 'col-user' },
@@ -128,8 +127,23 @@ function accountRow(a) {
 }
 
 let suppressClick = false;
+// A plain click on a row that's already part of a multi-selection waits briefly
+// before collapsing to that row, in case it's the first half of a
+// double-click-and-hold (which drags the whole selection).
+let pendingCollapse = null;
+function cancelPendingCollapse() { clearTimeout(pendingCollapse); pendingCollapse = null; }
 function onRowClick(e, id) {
   if (suppressClick) { suppressClick = false; return; }
+  if (e.detail >= 2) return; // second click of a double-click: leave selection alone
+  if (!e.shiftKey && !e.ctrlKey && !e.metaKey && state.selected.has(id) && state.selected.size > 1) {
+    cancelPendingCollapse();
+    pendingCollapse = setTimeout(() => {
+      pendingCollapse = null;
+      state.selected = new Set([id]); state.lastClicked = id;
+      renderAccounts(); renderEditor();
+    }, 300);
+    return;
+  }
   const ids = visibleAccounts().map(a => a.id);
   if (e.shiftKey && state.lastClicked) {
     const from = ids.indexOf(state.lastClicked), to = ids.indexOf(id);
@@ -237,8 +251,15 @@ function setupMarquee() {
     curX = e.clientX; curY = e.clientY;
     dragRows = [...list.querySelectorAll('.trow')]; // cache rows for the whole drag
     const row = e.target.closest('.trow');
-    if (row && state.selected.has(row.dataset.id) && !state.filter) {
-      reFrom = { x: e.clientX, y: e.clientY }; reActive = false; // maybe a reorder
+    if (row && e.detail >= 2 && !state.filter) {
+      // Double-click and hold: move. Keep the selection if this row is in it,
+      // otherwise move just this row.
+      cancelPendingCollapse();
+      if (!state.selected.has(row.dataset.id)) {
+        state.selected = new Set([row.dataset.id]); state.lastClicked = row.dataset.id;
+        for (const r of dragRows) r.classList.toggle('selected', r === row);
+      }
+      reFrom = { x: e.clientX, y: e.clientY }; reActive = false;
       return;
     }
     $$('.marquee').forEach(m => m.remove());
