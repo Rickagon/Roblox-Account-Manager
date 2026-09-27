@@ -509,7 +509,7 @@ function registerIpc() {
   function loginSlots(count) {
     const { screen } = require('electron');
     const wa = screen.getPrimaryDisplay().workArea;
-    const W = 330;                                   // narrow; Chrome clamps to its own minimum (~360px) if this is smaller
+    const W = 500;                                   // Chrome won't make a window narrower than ~500px; match it so tiles don't overlap
     const h = Math.floor(wa.height / ROWS);          // three per column, top to bottom
     const maxCols = Math.max(1, Math.floor(wa.width / W));
     const n = Math.min(count, maxCols * ROWS);

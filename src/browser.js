@@ -102,16 +102,41 @@ async function login(profilesRoot, { username = '', password = '', window: win }
     } catch { /* not JSON */ }
   });
 
+  // Show only the login card: hide Roblox's nav/header/footer and background so
+  // the small window is just the form. Re-applied on every navigation.
+  const focusLoginCss = `
+    #navigation-container, .rbx-navbar, #header, .age-bracket-label, footer, #footer-container,
+    .game-cards, .content > *:not(#login-container):not(.login-container):not([class*="signup"]) { display:none !important; }
+    body, #content, .content { background:#0f1115 !important; }
+    #login-container, .login-container, [class*="signupLoginContainer"] { margin:0 auto !important; float:none !important; }
+    body { overflow:hidden !important; }`;
+  const applyCss = () => page.addStyleTag({ content: focusLoginCss }).catch(() => {});
+  page.on('domcontentloaded', applyCss);
+
   await page.goto('https://www.roblox.com/login', { timeout: 120000 }).catch(() => {});
+  await applyCss();
 
   if (username) {
+    // Robustly fill: wait for each field, set it, and verify it stuck (retry once).
+    const fillField = async (sel, value) => {
+      try {
+        const el = await page.waitForSelector(sel, { timeout: 15000, state: 'visible' });
+        for (let attempt = 0; attempt < 2; attempt++) {
+          await el.click({ timeout: 5000 }).catch(() => {});
+          await el.fill('');
+          await el.type(value, { delay: 15 });
+          if (await el.inputValue().catch(() => '') === value) return true;
+        }
+      } catch { /* field never appeared */ }
+      return false;
+    };
     try {
-      await page.fill('#login-username', username, { timeout: 8000 });
+      await fillField('#login-username', username);
       if (password) {
-        await page.fill('#login-password', password, { timeout: 5000 });
-        await page.click('#login-button');
+        const ok = await fillField('#login-password', password);
+        if (ok) await page.click('#login-button', { timeout: 5000 }).catch(() => {});
       }
-    } catch { /* page layout changed; user can type it in */ }
+    } catch { /* user can finish by hand */ }
   }
 
   return new Promise(resolve => {
