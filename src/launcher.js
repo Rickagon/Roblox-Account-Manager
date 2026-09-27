@@ -96,8 +96,12 @@ Get-CimInstance Win32_Process -Filter "Name='RobloxPlayerBeta.exe'" |
 }
 
 async function countRobloxClients() {
-  const out = await ps(`@(Get-Process RobloxPlayerBeta -ErrorAction SilentlyContinue).Count`);
-  return Number(out) || 0;
+  // Count only clients that actually have a window. A Roblox process lingers for
+  // a while after you close its window, so counting all of them would keep the
+  // limit "full" long after you've closed clients.
+  const out = await ps(`$ProgressPreference='SilentlyContinue'; @(Get-Process RobloxPlayerBeta -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 }).Count`);
+  const m = String(out).match(/\d+/);
+  return m ? Number(m[0]) : 0;
 }
 
 // ---- Multi-Roblox ----

@@ -662,10 +662,10 @@ function registerIpc() {
     const max = Math.max(1, settings.maxActiveClients || 20);
     for (let i = 0; i < accounts.length; i++) {
       // Cap how many Roblox clients run at once.
-      for (let waited = 0; (await launcher.countRobloxClients().catch(() => 0)) >= max; waited += 3) {
-        if (waited === 0) log(`Reached the ${max}-client limit — waiting for a client to close before launching ${accounts[i].username}`);
+      for (let waited = 0; (await launcher.countRobloxClients().catch(() => 0)) >= max; waited += 1.5) {
+        if (waited === 0) log(`Reached the ${max}-client limit — close a Roblox window to launch ${accounts[i].username}`);
         if (waited >= 120) { log(`Still at the ${max}-client limit after 2 min; stopping. Raise the limit in Settings or close some clients.`, 'error'); pushAccounts(); return; }
-        await new Promise(r => setTimeout(r, 3000));
+        await new Promise(r => setTimeout(r, 1500));
       }
       try {
         await joinWith(accounts[i], { placeId, jobId, followUser });
