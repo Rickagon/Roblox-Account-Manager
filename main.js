@@ -503,18 +503,20 @@ function registerIpc() {
   // Login windows tiled across the screen, several at once. Each slot is a
   // window position; a worker per slot keeps opening the next login as soon
   // as its window finishes.
+  // Always 3 windows stacked per column, filled left-to-right, at the smallest
+  // usable size. Concurrency is however many columns of 3 fit across the screen.
+  const ROWS = 3;
   function loginSlots(count) {
     const { screen } = require('electron');
     const wa = screen.getPrimaryDisplay().workArea;
-    const MIN_W = 460, MIN_H = 500;
-    const maxCols = Math.max(1, Math.floor(wa.width / MIN_W));
-    const maxRows = Math.max(1, Math.floor(wa.height / MIN_H));
-    const n = Math.min(count, maxCols * maxRows);
-    // Squarish grid (4 -> 2x2), but wide enough that rows fit on screen.
-    const cols = Math.min(maxCols, Math.max(Math.ceil(Math.sqrt(n)), Math.ceil(n / maxRows)));
-    const rows = Math.ceil(n / cols);
-    const w = Math.floor(wa.width / cols), h = Math.floor(wa.height / rows);
-    return Array.from({ length: n }, (_, i) => ({ x: wa.x + (i % cols) * w, y: wa.y + Math.floor(i / cols) * h, w, h }));
+    const W = 400;                                   // tiniest width the login form still fits in
+    const h = Math.floor(wa.height / ROWS);          // three per column, top to bottom
+    const maxCols = Math.max(1, Math.floor(wa.width / W));
+    const n = Math.min(count, maxCols * ROWS);
+    return Array.from({ length: n }, (_, i) => {
+      const col = Math.floor(i / ROWS), row = i % ROWS;
+      return { x: wa.x + col * W, y: wa.y + row * h, w: W, h };
+    });
   }
 
   handle('account:addLogins', async text => {
