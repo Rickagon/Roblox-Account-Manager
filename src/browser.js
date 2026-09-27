@@ -12,8 +12,9 @@ chromium.use(stealth);
 
 const open = new Map(); // profileDir -> BrowserContext
 
-// Turn off Chrome's "Save password?" prompt in a profile: the app stores the
-// passwords itself. Merges into any existing Preferences file.
+// Prepare a profile before launch: turn off Chrome's "Save password?" prompt
+// (the app stores passwords itself) and mark the last session as clean so the
+// "Chrome didn't shut down correctly / Restore pages?" bubble never appears.
 function disablePasswordPrompts(profileDir) {
   const dir = path.join(profileDir, 'Default');
   const file = path.join(dir, 'Preferences');
@@ -21,7 +22,13 @@ function disablePasswordPrompts(profileDir) {
   try { prefs = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { /* new profile */ }
   prefs.credentials_enable_service = false;
   prefs.credentials_enable_autosignin = false;
-  prefs.profile = { ...(prefs.profile || {}), password_manager_enabled: false, password_manager_leak_detection: false };
+  prefs.profile = {
+    ...(prefs.profile || {}),
+    password_manager_enabled: false,
+    password_manager_leak_detection: false,
+    exit_type: 'Normal',      // pretend last exit was clean -> no "Restore pages?" prompt
+    exited_cleanly: true,
+  };
   try {
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(file, JSON.stringify(prefs));
@@ -41,7 +48,7 @@ function launch(profileDir, win = {}) {
 
   fs.mkdirSync(profileDir, { recursive: true });
   disablePasswordPrompts(profileDir);
-  const args = [`--window-size=${win.w || 900},${win.h || 760}`, '--no-first-run', '--no-default-browser-check', '--disable-save-password-bubble', '--test-type'];
+  const args = [`--window-size=${win.w || 900},${win.h || 760}`, '--no-first-run', '--no-default-browser-check', '--disable-save-password-bubble', '--test-type', '--disable-session-crashed-bubble', '--hide-crash-restore-bubble'];
   if (win.x != null && win.y != null) args.push(`--window-position=${win.x},${win.y}`);
   const opts = {
     headless: false,
