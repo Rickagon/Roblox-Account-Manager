@@ -463,3 +463,13 @@ table.servers th, table.servers td { padding: 4px 6px; }
 .trow:hover > div:not(.col-fill) { background: var(--panel-2); }
 .trow.selected > div:not(.col-fill) { background: color-mix(in srgb, var(--accent) 38%, var(--panel)); }
 .trow > .col-fill { padding: 0; align-self: stretch; }
+
+/* ---------- clean, full-height row highlight; blank area on the right ---------- */
+.thead, .trow { align-items: stretch; }
+.trow > div { display: flex; align-items: center; }
+.trow .col-status { justify-content: flex-end; }
+.trow { border-bottom: none; }
+.trow > div:not(.col-fill) { border-bottom: 1px solid color-mix(in srgb, var(--border) 40%, transparent); }
+.trow:hover > div:not(.col-fill) { background: var(--panel-2); }
+.trow.selected > div:not(.col-fill) { background: color-mix(in srgb, var(--accent) 40%, var(--panel)); }
+.trow > .col-fill { background: transparent !important; border: none !important; }
