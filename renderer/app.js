@@ -207,8 +207,19 @@ function setupMarquee() {
     }
   };
 
+  // Reorder-drag state (grabbing an already-selected row moves the selection).
+  let reFrom = null, reActive = false, dropTarget = null, dropAfter = false;
+  const clearDropMarks = () => list.querySelectorAll('.drop-above, .drop-below').forEach(r => r.classList.remove('drop-above', 'drop-below'));
+
   list.addEventListener('mousedown', e => {
     if (e.button !== 0 || e.target.closest('button, input, a')) return;
+    const row = e.target.closest('.trow');
+    if (row && state.selected.has(row.dataset.id) && !state.filter) {
+      // Grabbing a selected row -> potential reorder of the whole selection.
+      reFrom = { x: e.clientX, y: e.clientY };
+      reActive = false;
+      return;
+    }
     $$('.marquee').forEach(m => m.remove()); // clear any leftover box
     startX = curX = e.clientX;
     curY = e.clientY;
@@ -219,6 +230,24 @@ function setupMarquee() {
   });
 
   document.addEventListener('mousemove', e => {
+    if (reFrom) {
+      if (!reActive && Math.hypot(e.clientX - reFrom.x, e.clientY - reFrom.y) < 5) return;
+      reActive = true;
+      document.body.style.cursor = 'grabbing';
+      clearDropMarks();
+      dropTarget = null;
+      for (const r of list.querySelectorAll('.trow')) {
+        const b = r.getBoundingClientRect();
+        if (e.clientY < b.top + b.height / 2) { dropTarget = r; dropAfter = false; break; }
+        dropTarget = r; dropAfter = true;
+      }
+      if (dropTarget) dropTarget.classList.add(dropAfter ? 'drop-below' : 'drop-above');
+      // auto-scroll near edges while reordering
+      const lb = list.getBoundingClientRect();
+      if (e.clientY > lb.bottom - 30) list.scrollTop += 20;
+      else if (e.clientY < lb.top + 30) list.scrollTop -= 20;
+      return;
+    }
     if (startX == null) return;
     curX = e.clientX; curY = e.clientY;
     if (!active) {
@@ -232,6 +261,14 @@ function setupMarquee() {
   });
 
   const finish = () => {
+    if (reFrom) {
+      const wasActive = reActive, target = dropTarget, after = dropAfter;
+      document.body.style.cursor = '';
+      clearDropMarks();
+      reFrom = null; reActive = false; dropTarget = null;
+      if (wasActive && target) { suppressClick = true; run(reorderTo)(target.dataset.id, after); }
+      return;
+    }
     if (startX == null) return;
     const wasActive = active;
     cleanup();
@@ -239,6 +276,19 @@ function setupMarquee() {
   };
   document.addEventListener('mouseup', finish);
   window.addEventListener('blur', finish); // release if focus leaves mid-drag
+}
+
+// Move all selected accounts to just before/after the target row, then persist.
+async function reorderTo(targetId, after) {
+  if (state.selected.has(targetId)) return; // dropped onto the selection itself
+  const ids = state.accounts.map(a => a.id);
+  const moving = ids.filter(i => state.selected.has(i));
+  if (!moving.length) return;
+  const rest = ids.filter(i => !moving.includes(i));
+  let at = rest.indexOf(targetId);
+  if (at === -1) return;
+  if (after) at += 1;
+  await api(window.ram.reorder([...rest.slice(0, at), ...moving, ...rest.slice(at)]));
 }
 
 // ---------- right-click context menu ----------
@@ -645,7 +695,7 @@ function bind() {
       runOnStartup: $('#s-runOnStartup').checked,
       maxActiveClients: Math.max(1, Number($('#s-maxActiveClients').value) || 20),
       joinDelaySec: Number($('#s-joinDelaySec').value) || 0,
-      presenceIntervalSec: Number($('#s-presenceIntervalSec').value) || 20,
+      presenceIntervalSec: Number($('#s-presenceIntervalSec').value) || 5,
       keepAliveHours: Number($('#s-keepAliveHours').value) || 12,
       autoKeepAlive: $('#s-autoKeepAlive').checked,
       autoKeepAliveDays: Math.max(1, Number($('#s-autoKeepAliveDays').value) || 14),

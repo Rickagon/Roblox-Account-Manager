@@ -33,7 +33,7 @@ const DEFAULT_SETTINGS = {
   joinDelaySec: 8,
   shuffleJobId: false,
   showPresence: true,
-  presenceIntervalSec: 20,
+  presenceIntervalSec: 5,
   keepAliveHours: 12,
   maxRecentGames: 30,
   savedPlaceId: '',
@@ -262,7 +262,7 @@ async function pollPresence() {
 function restartTimers() {
   clearInterval(presenceTimer);
   clearInterval(keepAliveTimer);
-  presenceTimer = setInterval(pollPresence, Math.max(10, settings.presenceIntervalSec) * 1000);
+  presenceTimer = setInterval(pollPresence, Math.max(3, settings.presenceIntervalSec) * 1000);
   keepAliveTimer = setInterval(() => keepAlive(false), 60 * 60 * 1000);
 }
 
@@ -676,6 +676,8 @@ function registerIpc() {
       if (i < accounts.length - 1) await new Promise(r => setTimeout(r, settings.joinDelaySec * 1000));
     }
     pushAccounts();
+    // Refresh online status a few times after launching so the dots flip quickly.
+    for (const delay of [4000, 9000, 15000]) setTimeout(pollPresence, delay);
   });
 
   handle('servers', async ({ placeId, cursor }) => {
