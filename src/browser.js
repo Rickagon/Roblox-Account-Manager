@@ -12,6 +12,22 @@ chromium.use(stealth);
 
 const open = new Map(); // profileDir -> BrowserContext
 
+// Turn off Chrome's "Save password?" prompt in a profile: the app stores the
+// passwords itself. Merges into any existing Preferences file.
+function disablePasswordPrompts(profileDir) {
+  const dir = path.join(profileDir, 'Default');
+  const file = path.join(dir, 'Preferences');
+  let prefs = {};
+  try { prefs = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { /* new profile */ }
+  prefs.credentials_enable_service = false;
+  prefs.credentials_enable_autosignin = false;
+  prefs.profile = { ...(prefs.profile || {}), password_manager_enabled: false, password_manager_leak_detection: false };
+  try {
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(file, JSON.stringify(prefs));
+  } catch { /* not fatal */ }
+}
+
 /**
  * @param {string} profileDir
  * @param {{x?:number,y?:number,w?:number,h?:number}} [win] optional window placement
@@ -24,7 +40,8 @@ function launch(profileDir, win = {}) {
   if (existing) return existing;
 
   fs.mkdirSync(profileDir, { recursive: true });
-  const args = [`--window-size=${win.w || 900},${win.h || 760}`, '--no-first-run', '--no-default-browser-check'];
+  disablePasswordPrompts(profileDir);
+  const args = [`--window-size=${win.w || 900},${win.h || 760}`, '--no-first-run', '--no-default-browser-check', '--disable-save-password-bubble'];
   if (win.x != null && win.y != null) args.push(`--window-position=${win.x},${win.y}`);
   const opts = {
     headless: false,
