@@ -112,6 +112,7 @@ function accountRow(a) {
     class: `trow${state.selected.has(a.id) ? ' selected' : ''}`,
     'data-id': a.id,
     onclick: e => onRowClick(e, a.id),
+    ondblclick: e => { if (!e.target.closest('.col-fill')) $('#btn-join').click(); },
     oncontextmenu: e => onRowContext(e, a.id),
   },
     el('div', { class: 'col-user' },
@@ -122,28 +123,18 @@ function accountRow(a) {
     el('div', { class: 'col-alias', title: a.alias || '' }, a.alias || ''),
     el('div', { class: 'col-status' },
       !a.valid ? el('span', { class: 'badge bad' }, 'expired')
-        : !a.hasPassword ? el('span', { class: 'badge nopw', title: 'No password saved' }, 'no pw') : null));
+        : !a.hasPassword ? el('span', { class: 'badge nopw', title: 'No password saved' }, 'no pw') : null),
+    el('div', { class: 'col-fill' })); // empty area: start a box-select here
   return row;
 }
 
 let suppressClick = false;
-// A plain click on a row that's already part of a multi-selection waits briefly
-// before collapsing to that row, in case it's the first half of a
-// double-click-and-hold (which drags the whole selection).
-let pendingCollapse = null;
-function cancelPendingCollapse() { clearTimeout(pendingCollapse); pendingCollapse = null; }
+// Swallow the click that follows a drag, but only that one: if the release lands
+// on another element no click fires, so clear the flag right after.
+function suppressNextClick() { suppressClick = true; setTimeout(() => { suppressClick = false; }, 0); }
 function onRowClick(e, id) {
   if (suppressClick) { suppressClick = false; return; }
-  if (e.detail >= 2) return; // second click of a double-click: leave selection alone
-  if (!e.shiftKey && !e.ctrlKey && !e.metaKey && state.selected.has(id) && state.selected.size > 1) {
-    cancelPendingCollapse();
-    pendingCollapse = setTimeout(() => {
-      pendingCollapse = null;
-      state.selected = new Set([id]); state.lastClicked = id;
-      renderAccounts(); renderEditor();
-    }, 300);
-    return;
-  }
+  if (e.target.closest('.col-fill')) return; // empty area is handled by box-select
   const ids = visibleAccounts().map(a => a.id);
   if (e.shiftKey && state.lastClicked) {
     const from = ids.indexOf(state.lastClicked), to = ids.indexOf(id);
@@ -251,17 +242,15 @@ function setupMarquee() {
     curX = e.clientX; curY = e.clientY;
     dragRows = [...list.querySelectorAll('.trow')]; // cache rows for the whole drag
     const row = e.target.closest('.trow');
-    if (row && e.detail >= 2 && !state.filter) {
-      // Double-click and hold: move. Keep the selection if this row is in it,
-      // otherwise move just this row.
-      cancelPendingCollapse();
-      if (!state.selected.has(row.dataset.id)) {
-        state.selected = new Set([row.dataset.id]); state.lastClicked = row.dataset.id;
-        for (const r of dragRows) r.classList.toggle('selected', r === row);
-      }
-      reFrom = { x: e.clientX, y: e.clientY }; reActive = false;
+    const inFill = !!e.target.closest('.col-fill');
+    if (row && !inFill) {
+      // On an account's columns: dragging a highlighted row moves the selection.
+      // An unhighlighted row just gets selected by the normal click.
+      if (state.selected.has(row.dataset.id) && !state.filter) { reFrom = { x: e.clientX, y: e.clientY }; reActive = false; }
       return;
     }
+    if (e.target.closest('.group-head')) return;
+    // Empty area (right side, or below the list): box-select.
     $$('.marquee').forEach(m => m.remove());
     const lr = lrect();
     startX = e.clientX;
@@ -298,14 +287,19 @@ function setupMarquee() {
       const was = reActive, target = dropTarget, after = dropAfter;
       document.body.style.cursor = ''; clearDrop();
       reFrom = null; reActive = false; dropTarget = null; dragRows = null;
-      if (was) { setDragging(false); if (target) { suppressClick = true; run(reorderTo)(target.dataset.id, after); } }
+      if (was) { setDragging(false); if (target) { suppressNextClick(); run(reorderTo)(target.dataset.id, after); } }
       return;
     }
     if (startX == null) return;
     const was = mActive;
+    const keep = base && base.size > 0; // ctrl held at press
     if (box) { box.remove(); box = null; }
     startX = null; mActive = false; dragRows = null;
-    if (was) { setDragging(false); suppressClick = true; renderEditor(); }
+    if (was) { setDragging(false); suppressNextClick(); renderEditor(); }
+    else if (!keep && state.selected.size) {
+      // Plain click on the empty area clears the selection (like RAM).
+      state.selected = new Set(); renderAccounts(); renderEditor();
+    }
   };
   document.addEventListener('mouseup', finish);
   window.addEventListener('blur', finish);

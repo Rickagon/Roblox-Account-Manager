@@ -456,3 +456,10 @@ table.servers th, table.servers td { padding: 4px 6px; }
 
 /* reorder drop indicator (below a row) */
 .trow.drop-below { box-shadow: inset 0 -2px 0 var(--accent); }
+
+/* ---------- RAM-style: columns on the left, empty select area on the right ---------- */
+.thead, .trow { grid-template-columns: 180px 170px 64px 1fr; }
+.trow:hover, .trow.selected { background: transparent; }
+.trow:hover > div:not(.col-fill) { background: var(--panel-2); }
+.trow.selected > div:not(.col-fill) { background: color-mix(in srgb, var(--accent) 38%, var(--panel)); }
+.trow > .col-fill { padding: 0; align-self: stretch; }
