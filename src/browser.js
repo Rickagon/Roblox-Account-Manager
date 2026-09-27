@@ -12,7 +12,11 @@ chromium.use(stealth);
 
 const open = new Map(); // profileDir -> BrowserContext
 
-function launch(profileDir) {
+/**
+ * @param {string} profileDir
+ * @param {{x?:number,y?:number,w?:number,h?:number}} [win] optional window placement
+ */
+function launch(profileDir, win = {}) {
   // Cache the in-flight promise (not just the resolved context) so two quick
   // calls can't each spawn Chromium against the same profile folder, which is
   // what made browser windows reopen after being closed.
@@ -20,10 +24,12 @@ function launch(profileDir) {
   if (existing) return existing;
 
   fs.mkdirSync(profileDir, { recursive: true });
+  const args = [`--window-size=${win.w || 900},${win.h || 760}`, '--no-first-run', '--no-default-browser-check'];
+  if (win.x != null && win.y != null) args.push(`--window-position=${win.x},${win.y}`);
   const opts = {
     headless: false,
     viewport: null,
-    args: ['--window-size=900,760', '--no-first-run', '--no-default-browser-check'],
+    args,
     ignoreDefaultArgs: ['--enable-automation'],
   };
   const p = (async () => {
@@ -64,9 +70,9 @@ function cookieParam(value) {
  * Opens a login window. Resolves with { cookie, password, user, profileDir }
  * once the user has signed in, or null if they closed the window.
  */
-async function login(profilesRoot, { username = '', password = '' } = {}) {
+async function login(profilesRoot, { username = '', password = '', window: win } = {}) {
   const profileDir = path.join(profilesRoot, crypto.randomUUID());
-  const ctx = await launch(profileDir);
+  const ctx = await launch(profileDir, win);
   const page = ctx.pages()[0] || (await ctx.newPage());
 
   let capturedPassword = '';

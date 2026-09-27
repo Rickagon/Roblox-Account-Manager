@@ -460,7 +460,7 @@ async function addAccount(kind) {
     log('Log in to Roblox in the window that opened');
     await api(window.ram.addLogins(''));
   } else if (kind === 'auto') {
-    const text = await batchDialog('Auto login', 'One account per line as user:pass. A browser opens for each; you solve any captcha yourself.', 'user1:pass1\nuser2:pass2');
+    const text = await batchDialog('Auto login', 'One account per line as user:pass. Login windows open tiled across your screen, several at once, with the details filled in. You do the "hold" check in each one.', 'user1:pass1\nuser2:pass2');
     if (text?.trim()) { const r = await api(window.ram.addLogins(text)); log(`Added ${r.added} of ${r.total}`); }
   } else if (kind === 'cookie') {
     const text = await batchDialog('Login with cookie(s)', 'One .ROBLOSECURITY cookie per line.', '_|WARNING:-DO-NOT-SHARE-THIS...');

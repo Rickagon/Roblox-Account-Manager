@@ -500,28 +500,53 @@ function registerIpc() {
   });
 
   // Open a login window per "user:pass" line (or blank line = manual login). Sequential.
+  // Login windows tiled across the screen, several at once. Each slot is a
+  // window position; a worker per slot keeps opening the next login as soon
+  // as its window finishes.
+  function loginSlots(count) {
+    const { screen } = require('electron');
+    const wa = screen.getPrimaryDisplay().workArea;
+    const MIN_W = 460, MIN_H = 500;
+    const maxCols = Math.max(1, Math.floor(wa.width / MIN_W));
+    const maxRows = Math.max(1, Math.floor(wa.height / MIN_H));
+    const n = Math.min(count, maxCols * maxRows);
+    // Squarish grid (4 -> 2x2), but wide enough that rows fit on screen.
+    const cols = Math.min(maxCols, Math.max(Math.ceil(Math.sqrt(n)), Math.ceil(n / maxRows)));
+    const rows = Math.ceil(n / cols);
+    const w = Math.floor(wa.width / cols), h = Math.floor(wa.height / rows);
+    return Array.from({ length: n }, (_, i) => ({ x: wa.x + (i % cols) * w, y: wa.y + Math.floor(i / cols) * h, w, h }));
+  }
+
   handle('account:addLogins', async text => {
     const lines = String(text || '').split('\n').map(l => l.trim()).filter(Boolean);
     const creds = lines.length ? lines : [''];
+    const slots = creds.length > 1 ? loginSlots(creds.length) : [undefined]; // single login keeps the normal size
     let added = 0;
-    for (const line of creds) {
-      const idx = line.indexOf(':');
-      const username = idx > -1 ? line.slice(0, idx) : line;
-      const password = idx > -1 ? line.slice(idx + 1) : '';
-      log(username ? `Logging in ${username} — solve any captcha in the window` : 'Log in in the window that opened');
-      try {
-        const r = await browser.login(PROFILES_DIR, { username, password });
-        if (!r) { log('Login window closed, skipped'); continue; }
-        vault.upsert({
-          userId: r.user.id, username: r.user.name, displayName: r.user.displayName,
-          cookie: r.cookie, password: r.password, profileDir: r.profileDir, valid: true,
-          cookieUpdatedAt: new Date().toISOString(), lastChecked: new Date().toISOString(),
-        });
-        added++;
-        log(`Added ${r.user.name}`);
-        pushAccounts();
-      } catch (e) { log(`Login failed: ${e.message}`, 'error'); }
-    }
+    let next = 0;
+    if (creds.length > 1) log(`Opening ${Math.min(slots.length, creds.length)} login windows at a time. Do the "hold" check in each one.`);
+
+    const worker = async slot => {
+      while (next < creds.length) {
+        const line = creds[next++];
+        const idx = line.indexOf(':');
+        const username = idx > -1 ? line.slice(0, idx) : line;
+        const password = idx > -1 ? line.slice(idx + 1) : '';
+        if (creds.length === 1) log(username ? `Logging in ${username}. Solve any check in the window.` : 'Log in in the window that opened');
+        try {
+          const r = await browser.login(PROFILES_DIR, { username, password, window: slot });
+          if (!r) { log(`${username || 'Login'} window closed, skipped`); continue; }
+          vault.upsert({
+            userId: r.user.id, username: r.user.name, displayName: r.user.displayName,
+            cookie: r.cookie, password: r.password, profileDir: r.profileDir, valid: true,
+            cookieUpdatedAt: new Date().toISOString(), lastChecked: new Date().toISOString(),
+          });
+          added++;
+          log(`Added ${r.user.name} (${added} of ${creds.length})`);
+          pushAccounts();
+        } catch (e) { log(`${username}: login failed: ${e.message}`, 'error'); }
+      }
+    };
+    await Promise.all(slots.map(worker));
     refreshAvatars();
     return { added, total: creds.length };
   });
