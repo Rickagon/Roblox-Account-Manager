@@ -162,120 +162,132 @@ function applyPresence() {
 
 // ---------- drag (marquee) selection ----------
 
+// While a drag is in progress the account list must not be rebuilt from under
+// it (presence/keepalive pushes), or the drag stutters. Freeze and apply later.
+let isDragging = false;
+let pendingAccounts = null;
+function setDragging(v) {
+  isDragging = v;
+  if (!v) {
+    if (pendingAccounts) { state.accounts = pendingAccounts; pendingAccounts = null; renderAccounts(); renderEditor(); }
+    applyPresence();
+  }
+}
+
 function setupMarquee() {
   const list = $('#account-list');
-  let active = false, startX, startYContent, curX, curY, box, base, dragSel, scrollTimer;
+  let curX = 0, curY = 0, raf = null, dragRows = null, scrollTimer = null;
+  // marquee
+  let mActive = false, startX = null, startContentY = 0, box = null, base = null;
+  // reorder
+  let reFrom = null, reActive = false, dropTarget = null, dropAfter = false;
 
-  // The Y anchor is stored in scroll-content space so the box keeps growing as
-  // the list scrolls. anchorY() converts it back to the current viewport.
-  const anchorY = () => startYContent - list.scrollTop;
+  const lrect = () => list.getBoundingClientRect();
+  const rows = () => dragRows || [...list.querySelectorAll('.trow')];
+  const clearDrop = () => { if (dropTarget) dropTarget.classList.remove('drop-above', 'drop-below'); };
 
-  const cleanup = () => {
-    clearInterval(scrollTimer);
-    $$('.marquee').forEach(m => m.remove());
-    box = null; active = false; startX = null;
-  };
+  // One update per animation frame, using the latest mouse position.
+  const schedule = () => { if (raf == null) raf = requestAnimationFrame(frame); };
+  function frame() { raf = null; if (mActive) doMarquee(); else if (reActive) doReorder(); }
 
-  const hitTest = () => {
-    const lr = list.getBoundingClientRect();
-    const ay = anchorY();
-    // Clamp the box to the list's visible rectangle so it never draws over the header/toolbar.
+  function doMarquee() {
+    const lr = lrect();
+    const startVpTop = startContentY - list.scrollTop + lr.top;
+    // Visual box (viewport space, clamped to the list).
     const x = Math.max(lr.left, Math.min(startX, curX));
     const right = Math.min(lr.right, Math.max(startX, curX));
-    const top = Math.max(lr.top, Math.min(ay, curY));
-    const bottom = Math.min(lr.bottom, Math.max(ay, curY));
-    const w = Math.max(0, right - x), h = Math.max(0, bottom - top);
-    Object.assign(box.style, { left: x + 'px', top: top + 'px', width: w + 'px', height: h + 'px' });
-    for (const row of $$('.trow')) {
-      const b = row.getBoundingClientRect();
-      if (b.left < right && b.right > x && b.top < bottom && b.bottom > top) dragSel.add(row.dataset.id);
-    }
-    // Add-only for the duration of one drag, so rows stay selected after scrolling past them.
-    state.selected = new Set([...base, ...dragSel]);
-    for (const row of $$('.trow')) row.classList.toggle('selected', state.selected.has(row.dataset.id));
-  };
+    const top = Math.max(lr.top, Math.min(startVpTop, curY));
+    const bottom = Math.min(lr.bottom, Math.max(startVpTop, curY));
+    Object.assign(box.style, { left: x + 'px', top: top + 'px', width: Math.max(0, right - x) + 'px', height: Math.max(0, bottom - top) + 'px' });
+    // Selection band computed in the list's own coordinates, so scrolling
+    // extends it and moving back up shrinks it. Exact, not add-only.
+    const curContentY = curY - lr.top + list.scrollTop;
+    const lo = Math.min(startContentY, curContentY), hi = Math.max(startContentY, curContentY);
+    const sel = new Set(base);
+    for (const r of rows()) { const t = r.offsetTop; if (t < hi && t + r.offsetHeight > lo) sel.add(r.dataset.id); }
+    state.selected = sel;
+    for (const r of rows()) r.classList.toggle('selected', sel.has(r.dataset.id));
+  }
 
-  const autoScroll = () => {
-    const b = list.getBoundingClientRect();
-    let dy = 0;
-    if (curY > b.bottom - 30) dy = Math.min(26, (curY - b.bottom + 30) / 2 + 4);
-    else if (curY < b.top + 30) dy = -Math.min(26, (b.top + 30 - curY) / 2 + 4);
-    if (dy) {
-      const before = list.scrollTop;
-      list.scrollTop += dy;
-      if (list.scrollTop !== before) hitTest();
+  function doReorder() {
+    document.body.style.cursor = 'grabbing';
+    clearDrop();
+    dropTarget = null;
+    for (const r of rows()) {
+      const b = r.getBoundingClientRect();
+      if (curY < b.top + b.height / 2) { dropTarget = r; dropAfter = false; break; }
+      dropTarget = r; dropAfter = true;
     }
-  };
+    if (dropTarget) dropTarget.classList.add(dropAfter ? 'drop-below' : 'drop-above');
+  }
 
-  // Reorder-drag state (grabbing an already-selected row moves the selection).
-  let reFrom = null, reActive = false, dropTarget = null, dropAfter = false;
-  const clearDropMarks = () => list.querySelectorAll('.drop-above, .drop-below').forEach(r => r.classList.remove('drop-above', 'drop-below'));
+  const startAutoScroll = () => {
+    if (scrollTimer) return;
+    scrollTimer = setInterval(() => {
+      const b = lrect(); let dy = 0;
+      if (curY > b.bottom - 30) dy = 18; else if (curY < b.top + 30) dy = -18;
+      if (dy) { const before = list.scrollTop; list.scrollTop += dy; if (list.scrollTop !== before) schedule(); }
+    }, 30);
+  };
+  const stopAutoScroll = () => { clearInterval(scrollTimer); scrollTimer = null; };
 
   list.addEventListener('mousedown', e => {
     if (e.button !== 0 || e.target.closest('button, input, a')) return;
+    startX = null;
+    curX = e.clientX; curY = e.clientY;
+    dragRows = [...list.querySelectorAll('.trow')]; // cache rows for the whole drag
     const row = e.target.closest('.trow');
     if (row && state.selected.has(row.dataset.id) && !state.filter) {
-      // Grabbing a selected row -> potential reorder of the whole selection.
-      reFrom = { x: e.clientX, y: e.clientY };
-      reActive = false;
+      reFrom = { x: e.clientX, y: e.clientY }; reActive = false; // maybe a reorder
       return;
     }
-    $$('.marquee').forEach(m => m.remove()); // clear any leftover box
-    startX = curX = e.clientX;
-    curY = e.clientY;
-    startYContent = e.clientY + list.scrollTop;
+    $$('.marquee').forEach(m => m.remove());
+    const lr = lrect();
+    startX = e.clientX;
+    startContentY = e.clientY - lr.top + list.scrollTop;
     base = (e.ctrlKey || e.metaKey) ? new Set(state.selected) : new Set();
-    dragSel = new Set();
-    active = false;
+    mActive = false;
   });
 
   document.addEventListener('mousemove', e => {
+    curX = e.clientX; curY = e.clientY;
     if (reFrom) {
-      if (!reActive && Math.hypot(e.clientX - reFrom.x, e.clientY - reFrom.y) < 5) return;
-      reActive = true;
-      document.body.style.cursor = 'grabbing';
-      clearDropMarks();
-      dropTarget = null;
-      for (const r of list.querySelectorAll('.trow')) {
-        const b = r.getBoundingClientRect();
-        if (e.clientY < b.top + b.height / 2) { dropTarget = r; dropAfter = false; break; }
-        dropTarget = r; dropAfter = true;
+      if (!reActive) {
+        if (Math.hypot(curX - reFrom.x, curY - reFrom.y) < 5) return;
+        reActive = true; setDragging(true); startAutoScroll();
       }
-      if (dropTarget) dropTarget.classList.add(dropAfter ? 'drop-below' : 'drop-above');
-      // auto-scroll near edges while reordering
-      const lb = list.getBoundingClientRect();
-      if (e.clientY > lb.bottom - 30) list.scrollTop += 20;
-      else if (e.clientY < lb.top + 30) list.scrollTop -= 20;
+      schedule();
       return;
     }
     if (startX == null) return;
-    curX = e.clientX; curY = e.clientY;
-    if (!active) {
-      if (Math.hypot(curX - startX, curY - anchorY()) < 5) return;
-      active = true;
-      box = el('div', { class: 'marquee' });
-      document.body.append(box);
-      scrollTimer = setInterval(autoScroll, 50);
+    if (!mActive) {
+      const startVp = startContentY - list.scrollTop + lrect().top;
+      if (Math.hypot(curX - startX, curY - startVp) < 5) return;
+      mActive = true; setDragging(true);
+      box = el('div', { class: 'marquee' }); document.body.append(box);
+      startAutoScroll();
     }
-    try { hitTest(); } catch { cleanup(); }
+    schedule();
   });
 
   const finish = () => {
+    stopAutoScroll();
+    if (raf != null) { cancelAnimationFrame(raf); raf = null; }
     if (reFrom) {
-      const wasActive = reActive, target = dropTarget, after = dropAfter;
-      document.body.style.cursor = '';
-      clearDropMarks();
-      reFrom = null; reActive = false; dropTarget = null;
-      if (wasActive && target) { suppressClick = true; run(reorderTo)(target.dataset.id, after); }
+      const was = reActive, target = dropTarget, after = dropAfter;
+      document.body.style.cursor = ''; clearDrop();
+      reFrom = null; reActive = false; dropTarget = null; dragRows = null;
+      if (was) { setDragging(false); if (target) { suppressClick = true; run(reorderTo)(target.dataset.id, after); } }
       return;
     }
     if (startX == null) return;
-    const wasActive = active;
-    cleanup();
-    if (wasActive) { suppressClick = true; renderEditor(); }
+    const was = mActive;
+    if (box) { box.remove(); box = null; }
+    startX = null; mActive = false; dragRows = null;
+    if (was) { setDragging(false); suppressClick = true; renderEditor(); }
   };
   document.addEventListener('mouseup', finish);
-  window.addEventListener('blur', finish); // release if focus leaves mid-drag
+  window.addEventListener('blur', finish);
 }
 
 // Move all selected accounts to just before/after the target row, then persist.
@@ -709,8 +721,11 @@ function bind() {
 
 // ---------- events from main ----------
 
-window.ram.onAccounts(list => { state.accounts = list; renderAccounts(); renderEditor(); });
-window.ram.onPresence(p => { state.presence = p; applyPresence(); });
+window.ram.onAccounts(list => {
+  if (isDragging) { pendingAccounts = list; return; } // applied when the drag ends
+  state.accounts = list; renderAccounts(); renderEditor();
+});
+window.ram.onPresence(p => { state.presence = p; if (!isDragging) applyPresence(); });
 window.ram.onLog(({ msg, level }) => log(msg, level === 'error' ? 'error' : 'info'));
 
 // ---------- boot ----------
