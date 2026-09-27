@@ -47,7 +47,9 @@ function launch(profileDir, win = {}) {
     headless: false,
     viewport: null,
     args,
-    ignoreDefaultArgs: ['--enable-automation'],
+    // Drop --enable-automation (the "controlled by automated software" banner)
+    // and --no-sandbox (the yellow "unsupported command-line flag" warning).
+    ignoreDefaultArgs: ['--enable-automation', '--no-sandbox'],
   };
   const p = (async () => {
     try {
