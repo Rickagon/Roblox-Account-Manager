@@ -41,7 +41,7 @@ function launch(profileDir, win = {}) {
 
   fs.mkdirSync(profileDir, { recursive: true });
   disablePasswordPrompts(profileDir);
-  const args = [`--window-size=${win.w || 900},${win.h || 760}`, '--no-first-run', '--no-default-browser-check', '--disable-save-password-bubble'];
+  const args = [`--window-size=${win.w || 900},${win.h || 760}`, '--no-first-run', '--no-default-browser-check', '--disable-save-password-bubble', '--test-type'];
   if (win.x != null && win.y != null) args.push(`--window-position=${win.x},${win.y}`);
   const opts = {
     headless: false,
