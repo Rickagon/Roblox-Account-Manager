@@ -473,3 +473,13 @@ table.servers th, table.servers td { padding: 4px 6px; }
 .trow:hover > div:not(.col-fill) { background: var(--panel-2); }
 .trow.selected > div:not(.col-fill) { background: color-mix(in srgb, var(--accent) 40%, var(--panel)); }
 .trow > .col-fill { background: transparent !important; border: none !important; }
+
+/* ---------- full-width drop indicator line during reorder ---------- */
+.trow.drop-above, .trow.drop-below { box-shadow: none; }
+.trow { position: relative; }
+.trow.drop-above::after, .trow.drop-below::after {
+  content: ''; position: absolute; left: 0; right: 0; height: 2px;
+  background: var(--accent); z-index: 3; pointer-events: none;
+}
+.trow.drop-above::after { top: -1px; }
+.trow.drop-below::after { bottom: -1px; }
