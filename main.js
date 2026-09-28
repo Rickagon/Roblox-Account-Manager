@@ -30,6 +30,7 @@ const DEFAULT_RAM_DIR = path.join(app.getPath('downloads'), 'Roblox.Account.Mana
 const DEFAULT_SETTINGS = {
   multiRoblox: true,
   closeLastOnLaunch: true,
+  killClosedClients: true,
   joinDelaySec: 8,
   shuffleJobId: false,
   showPresence: true,
@@ -259,11 +260,20 @@ async function pollPresence() {
   }
 }
 
+let zombieTimer;
 function restartTimers() {
   clearInterval(presenceTimer);
   clearInterval(keepAliveTimer);
+  clearInterval(zombieTimer);
   presenceTimer = setInterval(pollPresence, Math.max(3, settings.presenceIntervalSec) * 1000);
   keepAliveTimer = setInterval(() => keepAlive(false), 60 * 60 * 1000);
+  // Clean up Roblox clients you closed but that never exited.
+  if (settings.killClosedClients !== false) {
+    zombieTimer = setInterval(async () => {
+      const n = await launcher.killWindowlessClients(40).catch(() => 0);
+      if (n) log(`Closed ${n} leftover Roblox client${n > 1 ? 's' : ''} that didn't exit`);
+    }, 15000);
+  }
 }
 
 // ---------- joining games ----------
@@ -406,7 +416,7 @@ function registerIpc() {
   handle('settings:set', patch => {
     settings = { ...settings, ...patch };
     saveSettings();
-    if ('presenceIntervalSec' in patch || 'showPresence' in patch) restartTimers();
+    if ('presenceIntervalSec' in patch || 'showPresence' in patch || 'killClosedClients' in patch) restartTimers();
     if ('autoKeepAlive' in patch) syncScheduledTask();
     if ('runOnStartup' in patch) syncLoginItem();
     if ('multiRoblox' in patch) {

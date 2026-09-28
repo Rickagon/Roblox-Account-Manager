@@ -702,6 +702,7 @@ function bind() {
     const s = state.settings;
     $('#s-multiRoblox').checked = s.multiRoblox;
     $('#s-closeLastOnLaunch').checked = s.closeLastOnLaunch;
+    $('#s-killClosedClients').checked = s.killClosedClients !== false;
     $('#s-showPresence').checked = s.showPresence;
     $('#s-agingAlert').checked = s.agingAlert !== false;
     $('#s-runOnStartup').checked = s.runOnStartup;
@@ -717,6 +718,7 @@ function bind() {
     state.settings = await api(window.ram.setSettings({
       multiRoblox: $('#s-multiRoblox').checked,
       closeLastOnLaunch: $('#s-closeLastOnLaunch').checked,
+      killClosedClients: $('#s-killClosedClients').checked,
       showPresence: $('#s-showPresence').checked,
       agingAlert: $('#s-agingAlert').checked,
       runOnStartup: $('#s-runOnStartup').checked,

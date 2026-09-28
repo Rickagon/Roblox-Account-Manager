@@ -104,6 +104,29 @@ async function countRobloxClients() {
   return m ? Number(m[0]) : 0;
 }
 
+/**
+ * Force-kill Roblox clients whose window is gone but whose process is still
+ * running (what happens when you X out and Roblox fails to exit). Spares clients
+ * younger than minAgeSec so ones still loading (no window yet) aren't killed.
+ * Returns how many it killed.
+ */
+async function killWindowlessClients(minAgeSec = 40) {
+  const out = await ps(`
+$ProgressPreference='SilentlyContinue'
+$killed = 0
+Get-CimInstance Win32_Process -Filter "Name='RobloxPlayerBeta.exe'" | ForEach-Object {
+  $p = Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue
+  $age = ((Get-Date) - $_.CreationDate).TotalSeconds
+  if ($p -and $p.MainWindowHandle -eq 0 -and $age -gt ${minAgeSec}) {
+    Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
+    $killed++
+  }
+}
+[Console]::Out.Write($killed)`);
+  const m = String(out).match(/\d+/);
+  return m ? Number(m[0]) : 0;
+}
+
 // ---- Multi-Roblox ----
 // Roblox refuses to start a second client while "ROBLOX_singletonMutex" is
 // held by another Roblox. Grabbing it ourselves first makes every client
@@ -156,6 +179,7 @@ module.exports = {
   launchUri,
   closeClientsFor,
   countRobloxClients,
+  killWindowlessClients,
   enableMultiRoblox,
   disableMultiRoblox,
   isMultiRobloxEnabled,
