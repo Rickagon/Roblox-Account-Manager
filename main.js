@@ -688,15 +688,8 @@ function registerIpc() {
     pushAccounts();
   });
 
-  handle('account:remove', async ids => {
-    const ok = await dialog.showMessageBox(win, {
-      type: 'warning',
-      buttons: ['Remove', 'Cancel'],
-      defaultId: 1,
-      message: `Remove ${ids.length} account${ids.length > 1 ? 's' : ''}?`,
-      detail: 'This only removes them from this app. The Roblox accounts are not affected.',
-    });
-    if (ok.response !== 0) return false;
+  handle('account:remove', ids => {
+    // Confirmation is handled by an in-app dialog in the renderer.
     for (const id of ids) vault.remove(id);
     pushAccounts();
     return true;

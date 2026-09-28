@@ -440,9 +440,18 @@ async function copyField(what) {
   else { const n = await api(window.ram.copyMany(ids, what)); log(`Copied ${COPY_LABEL[what]} for ${n} accounts (one per line)`); }
 }
 
-async function removeSelected() {
-  if (!state.selected.size) return;
-  if (await api(window.ram.removeAccounts([...state.selected]))) { state.selected.clear(); renderEditor(); }
+function removeSelected() {
+  const accs = selectedAccounts();
+  if (!accs.length) return;
+  const dlg = $('#dlg-remove');
+  $('#remove-title').textContent = `Remove ${accs.length} account${accs.length > 1 ? 's' : ''}?`;
+  $('#remove-list').replaceChildren(...accs.map(a => el('div', { class: 'ci-row' }, a.username)));
+  $('#remove-confirm').onclick = run(async () => {
+    dlg.close();
+    const ids = accs.map(a => a.id);
+    if (await api(window.ram.removeAccounts(ids))) { state.selected.clear(); renderEditor(); log(`Removed ${ids.length} account${ids.length > 1 ? 's' : ''}`); }
+  });
+  dlg.showModal();
 }
 
 async function reloginSelected() {
@@ -593,6 +602,9 @@ async function openUtils() {
   $('#u-cur').value = ''; $('#u-new').value = '';
   // For a batch, the current-password field is optional (uses saved passwords).
   $('#u-cur').placeholder = one ? 'Current password' : 'Current password (blank = use saved)';
+  // List the accounts these actions will affect, and clear any old result.
+  $('#utils-accounts').replaceChildren(...accs.map(a => el('div', { class: 'ci-row' }, a.username)));
+  utilsResult('');
   dlg.showModal();
 
   if (one) {
@@ -609,6 +621,12 @@ async function openUtils() {
   } else {
     $('#utils-summary').textContent = `Changes below apply to all ${accs.length} selected accounts.`;
   }
+}
+
+function utilsResult(text, kind = '') {
+  const el = $('#utils-result');
+  el.textContent = text;
+  el.className = 'utils-result' + (kind ? ' ' + kind : '');
 }
 
 function openGroupDialog() {
@@ -709,26 +727,34 @@ function bind() {
   $('#btn-set-group').onclick = run(() => setField('group', $('#f-group').value.trim() || 'Default'));
   $('#f-group').onkeydown = e => { if (e.key === 'Enter') $('#btn-set-group').click(); };
 
-  // utilities dialog
-  $('#u-display-btn').onclick = run(async () => {
+  // utilities dialog — each action shows a working/done result in the dialog
+  const utilsAction = async (label, ids, fn) => {
+    utilsResult(`${label}…`, 'working');
+    try {
+      const ok = await fn();
+      const n = typeof ok === 'number' ? ok : ids.length;
+      utilsResult(n >= ids.length ? `✓ ${label} — done for ${n} of ${ids.length}` : `⚠ ${label} — done for ${n} of ${ids.length} (see log)`, n >= ids.length ? 'ok' : 'warn');
+    } catch (e) {
+      utilsResult(`✕ ${label} failed: ${e.message}`, 'err');
+    }
+  };
+  $('#u-display-btn').onclick = () => {
     const ids = [...state.selected], name = $('#u-display').value.trim();
-    if (!ids.length || !name) return;
-    const ok = await api(window.ram.setDisplayName(ids, name));
-    log(`Display name set for ${ok} of ${ids.length}`);
-  });
-  $('#u-pass-btn').onclick = run(async () => {
+    if (!ids.length || !name) return utilsResult('Enter a display name first', 'warn');
+    utilsAction('Set display name', ids, () => api(window.ram.setDisplayName(ids, name)));
+  };
+  $('#u-pass-btn').onclick = () => {
     const ids = [...state.selected];
     const cur = $('#u-cur').value, next = $('#u-new').value;
-    if (!ids.length || !next) return log('Enter a new password');
-    if (ids.length === 1 && !cur) return log('Enter the current password');
-    const ok = await api(window.ram.changePassword(ids, cur, next));
-    $('#u-cur').value = ''; $('#u-new').value = '';
-    log(`Password changed for ${ok} of ${ids.length}`);
-  });
-  $('#u-privacy-btn').onclick = run(async () => {
-    if (!needSelection()) return;
-    await api(window.ram.setJoinPrivacy([...state.selected], $('#u-privacy').value));
-  });
+    if (!ids.length || !next) return utilsResult('Enter a new password', 'warn');
+    if (ids.length === 1 && !cur) return utilsResult('Enter the current password', 'warn');
+    utilsAction('Change password', ids, async () => { const ok = await api(window.ram.changePassword(ids, cur, next)); $('#u-cur').value = ''; $('#u-new').value = ''; return ok; });
+  };
+  $('#u-privacy-btn').onclick = () => {
+    const ids = [...state.selected];
+    if (!ids.length) return utilsResult('Select accounts first', 'warn');
+    utilsAction('Set join privacy', ids, () => api(window.ram.setJoinPrivacy(ids, $('#u-privacy').value)).then(() => ids.length));
+  };
 
   // settings
   $('#btn-settings').onclick = () => {

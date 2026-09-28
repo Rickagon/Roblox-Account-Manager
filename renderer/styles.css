@@ -504,3 +504,12 @@ table.servers th, table.servers td { padding: 4px 6px; }
 .about { margin-top: 10px; text-align: center; }
 .about a { color: var(--accent); text-decoration: none; }
 .about a:hover { text-decoration: underline; }
+
+/* confirm/affected account lists + utils result */
+.confirm-list { max-height: 160px; overflow-y: auto; margin: 6px 0; display: flex; flex-direction: column; gap: 1px; }
+.confirm-list .ci-row { padding: 3px 8px; background: var(--panel-2); border-radius: 5px; font-size: 12px; }
+.utils-result { min-height: 16px; margin: 4px 0 2px; font-size: 12px; }
+.utils-result.working { color: var(--muted); }
+.utils-result.ok { color: var(--ok); }
+.utils-result.warn { color: var(--warn); }
+.utils-result.err { color: var(--danger); }

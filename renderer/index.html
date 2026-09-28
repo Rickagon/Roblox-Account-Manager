@@ -164,6 +164,8 @@
   <dialog id="dlg-utils" class="dialog">
     <div class="dialog-head"><h3 id="utils-title">Account Utilities</h3><button class="icon" data-close>✕</button></div>
     <div id="utils-summary" class="summary muted small-text">Loading summary…</div>
+    <div id="utils-accounts" class="confirm-list"></div>
+    <div id="utils-result" class="utils-result"></div>
 
     <h4>Set display name</h4>
     <div class="row tight"><input id="u-display" class="grow" placeholder="New display name"><button id="u-display-btn">Set</button></div>
@@ -190,6 +192,14 @@
     <div class="dialog-head"><h3>Move to group</h3><button class="icon" data-close>✕</button></div>
     <div id="group-choices" class="group-choices"></div>
     <div class="row tight"><input id="group-new" class="grow" placeholder="New group name"><button id="group-new-btn">Create</button></div>
+  </dialog>
+
+  <!-- Remove confirmation -->
+  <dialog id="dlg-remove" class="dialog">
+    <div class="dialog-head"><h3 id="remove-title">Remove accounts?</h3></div>
+    <p class="muted small-text">This only removes them from this app. The Roblox accounts are not affected.</p>
+    <div id="remove-list" class="confirm-list"></div>
+    <div class="row end"><button data-close>Cancel</button><button id="remove-confirm" class="danger">Remove</button></div>
   </dialog>
 
   <dialog id="dlg-prompt" class="dialog">
