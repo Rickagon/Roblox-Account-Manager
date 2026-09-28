@@ -386,7 +386,7 @@ async function joinWith(acc, opts) {
   log(`${acc.username}: launching`);
 
   // Queue this account's name to label the next Roblox window that appears.
-  if (settings.labelWindows !== false) { pendingWindowLabels.push(`Roblox — ${acc.alias || acc.username}`); startWindowLabeler(); }
+  if (settings.labelWindows !== false) { pendingWindowLabels.push(acc.alias || acc.username); startWindowLabeler(); }
 }
 
 // Windows are matched to accounts by launch order (Roblox no longer exposes an
