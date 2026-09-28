@@ -172,6 +172,25 @@ function applyPresence() {
     // No game -> let the alias use this column's space (see CSS .in-game).
     cell.closest('.trow')?.classList.toggle('in-game', !!game);
   }
+  updateWindowTitle();
+}
+
+// Live counter in the window title bar (shows in the taskbar / Alt-Tab).
+function updateWindowTitle() {
+  const total = state.accounts.length;
+  if (!total) { document.title = 'Roblox Account Manager'; return; }
+  let ingame = 0, online = 0, expired = 0;
+  for (const a of state.accounts) {
+    if (!a.valid) { expired++; continue; }
+    const t = state.presence[a.userId]?.userPresenceType;
+    if (t === 2) ingame++;
+    else if (t === 1 || t === 3) online++;
+  }
+  const parts = [];
+  if (ingame) parts.push(`${ingame} in-game`);
+  if (online) parts.push(`${online} online`);
+  if (expired) parts.push(`${expired} expired`);
+  document.title = parts.length ? `RAM — ${parts.join(' · ')}` : `Roblox Account Manager — ${total} accounts`;
 }
 
 // ---------- drag (marquee) selection ----------
