@@ -385,15 +385,21 @@ async function joinWith(acc, opts) {
   vault.update(acc.id, { lastUse: new Date().toISOString() });
   log(`${acc.username}: launching`);
 
-  // Queue this account's name to label the next Roblox window that appears.
-  if (settings.labelWindows !== false) { pendingWindowLabels.push(acc.username); startWindowLabeler(); }
+  // Queue this account's name with the time it was launched.
+  if (settings.labelWindows !== false) { pendingWindowLabels.push({ label: acc.username, at: Date.now() }); startWindowLabeler(); }
 }
 
 // Windows are matched to accounts by launch order (Roblox no longer exposes an
-// account id in the client). Each new game window gets the next queued name;
-// names are re-applied because Roblox resets its own title while loading.
-const pendingWindowLabels = [];
-const labeledWindows = new Map(); // hwnd -> label
+// account id in the client). Robustness:
+//  - a queued name only goes to a window that first appeared AFTER it was
+//    launched, so windows open before a launch are never mislabeled;
+//  - oldest queued name -> oldest such window (stable FIFO);
+//  - names are re-applied every tick, so Roblox resetting its title (or a
+//    later reload) never leaves a window as plain "Roblox";
+//  - a queued name that finds no window within 3 min is dropped.
+const pendingWindowLabels = [];    // { label, at }
+const labeledWindows = new Map();  // hwnd -> label
+const windowFirstSeen = new Map(); // hwnd -> timestamp first observed
 let windowLabelTimer = null;
 function startWindowLabeler() {
   if (windowLabelTimer) return;
@@ -402,9 +408,23 @@ function startWindowLabeler() {
       const wins = await launcher.listRobloxWindows();
       const live = new Set(wins.map(w => w.hwnd));
       for (const h of [...labeledWindows.keys()]) if (!live.has(h)) labeledWindows.delete(h);
-      for (const w of wins) {
-        if (!labeledWindows.has(w.hwnd) && pendingWindowLabels.length) labeledWindows.set(w.hwnd, pendingWindowLabels.shift());
+      for (const h of [...windowFirstSeen.keys()]) if (!live.has(h)) windowFirstSeen.delete(h);
+      const now = Date.now();
+      for (const w of wins) if (!windowFirstSeen.has(w.hwnd)) windowFirstSeen.set(w.hwnd, now);
+
+      // Drop stale queued names (never matched a window).
+      while (pendingWindowLabels.length && now - pendingWindowLabels[0].at > 180000) pendingWindowLabels.shift();
+
+      // Assign oldest queued name to the oldest unclaimed window that appeared
+      // after that name was launched.
+      const unclaimed = wins.filter(w => !labeledWindows.has(w.hwnd)).sort((a, b) => windowFirstSeen.get(a.hwnd) - windowFirstSeen.get(b.hwnd));
+      for (const w of unclaimed) {
+        const seen = windowFirstSeen.get(w.hwnd);
+        const idx = pendingWindowLabels.findIndex(p => seen >= p.at);
+        if (idx === -1) continue;
+        labeledWindows.set(w.hwnd, pendingWindowLabels.splice(idx, 1)[0].label);
       }
+
       const apply = {};
       for (const w of wins) {
         const label = labeledWindows.get(w.hwnd);

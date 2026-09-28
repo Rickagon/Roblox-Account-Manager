@@ -184,12 +184,14 @@ function updateCounts() {
     if (t === 2) ingame++;
     else if (t === 1 || t === 3) online++;
   }
-  const parts = [`${total} accounts`];
-  if (ingame) parts.push(`${ingame} in-game`);
-  if (online) parts.push(`${online} online`);
-  if (dead) parts.push(`${dead} need login`);
-  const el = $('#count');
-  if (el) el.textContent = parts.join(' · ');
+  const box = $('#count');
+  if (!box) return;
+  const seg = (text, cls) => { const s = document.createElement('span'); if (cls) s.className = cls; s.textContent = text; return s; };
+  const kids = [seg(`${total} accounts`)];
+  if (ingame) kids.push(seg(' · '), seg(`${ingame} in-game`, 'c-ingame'));
+  if (online) kids.push(seg(' · '), seg(`${online} online`, 'c-online'));
+  if (dead) kids.push(seg(' · '), seg(`${dead} need login`, 'c-dead'));
+  box.replaceChildren(...kids);
 }
 
 // ---------- drag (marquee) selection ----------
