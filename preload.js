@@ -41,4 +41,5 @@ contextBridge.exposeInMainWorld('ram', {
   onRecent: fn => on('recent', fn),
   onLog: fn => on('log', fn),
   onKeepAlive: fn => on('keepalive', fn),
+  onJoining: fn => on('joining', fn),
 });

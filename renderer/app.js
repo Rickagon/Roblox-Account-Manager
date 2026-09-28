@@ -121,6 +121,7 @@ function accountRow(a) {
       el('span', { class: 'uname', title: a.username }, a.username),
       isAging(a) ? el('span', { class: 'aging', title: `Not launched in ${AGING_DAYS}+ days` }, '⏱') : null),
     el('div', { class: 'col-alias', title: a.alias || '' }, a.alias || ''),
+    el('div', { class: 'col-game', 'data-uid': a.userId }), // filled by applyPresence when in-game
     el('div', { class: 'col-status' },
       !a.valid ? el('span', { class: 'badge bad' }, 'expired')
         : !a.hasPassword ? el('span', { class: 'badge nopw', title: 'No password saved' }, 'no pw') : null),
@@ -162,6 +163,12 @@ function applyPresence() {
     const info = PRESENCE[p?.userPresenceType ?? 0] || PRESENCE[0];
     dot.className = `sdot ${info.cls}`;
     dot.title = p?.userPresenceType === 2 && p.lastLocation ? `In game: ${p.lastLocation}` : info.label;
+  }
+  for (const cell of $$('.col-game')) {
+    const p = state.presence[cell.dataset.uid];
+    const game = p?.userPresenceType === 2 ? (p.lastLocation || 'In game') : (p?.userPresenceType === 3 ? 'Studio' : '');
+    cell.textContent = game;
+    cell.title = game;
   }
 }
 
@@ -644,7 +651,7 @@ function bind() {
 
   $('#btn-remove').onclick = run(() => { if (needSelection()) return removeSelected(); });
   $('#hide-usernames').onchange = e => { document.body.classList.toggle('hide-names', e.target.checked); safeSet('hideUsernames', e.target.checked ? '1' : ''); };
-  $('#btn-close-roblox').onclick = run(async () => log(`Closed ${await api(window.ram.closeAllRoblox())} Roblox client(s)`));
+  $('#btn-close-roblox').onclick = run(async () => { const n = await api(window.ram.closeAllRoblox()); log(`Stopped the queue and closed ${n} Roblox client(s)`); });
   $('#search').oninput = e => { state.filter = e.target.value; renderAccounts(); };
 
   $('#btn-select-all').onclick = () => {
@@ -747,6 +754,11 @@ window.ram.onAccounts(list => {
 });
 window.ram.onPresence(p => { state.presence = p; if (!isDragging) applyPresence(); });
 window.ram.onLog(({ msg, level }) => log(msg, level === 'error' ? 'error' : 'info'));
+window.ram.onJoining(active => {
+  const btn = $('#btn-join');
+  btn.disabled = active;              // can't accidentally re-launch mid-batch
+  btn.textContent = active ? 'Launching…' : 'Join Server';
+});
 
 // ---------- boot ----------
 

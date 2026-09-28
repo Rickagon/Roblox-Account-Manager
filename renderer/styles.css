@@ -483,3 +483,7 @@ table.servers th, table.servers td { padding: 4px 6px; }
 }
 .trow.drop-above::after { top: -1px; }
 .trow.drop-below::after { bottom: -1px; }
+
+/* ---------- current-game column (keeps the empty drag area on the right) ---------- */
+.thead, .trow { grid-template-columns: 170px 150px minmax(120px, 220px) 60px 1fr; }
+.trow .col-game { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

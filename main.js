@@ -58,6 +58,8 @@ let recentGames = [];
 const clients = new Map(); // account id -> RobloxClient
 let presenceTimer;
 let keepAliveTimer;
+let joinInProgress = false; // a launch batch is running
+let joinCancel = false;     // request to stop the launch queue
 
 // ---------- persistence helpers ----------
 
@@ -684,27 +686,42 @@ function registerIpc() {
   });
 
   handle('join', async ({ ids, placeId, jobId, followUser }) => {
-    await ensureMultiRoblox();
-    const accounts = ids.map(id => vault.get(id)).filter(Boolean);
-    const max = Math.max(1, settings.maxActiveClients || 20);
-    for (let i = 0; i < accounts.length; i++) {
-      // Cap how many Roblox clients run at once.
-      for (let waited = 0; (await launcher.countRobloxClients().catch(() => 0)) >= max; waited += 1.5) {
-        if (waited === 0) log(`Reached the ${max}-client limit — close a Roblox window to launch ${accounts[i].username}`);
-        if (waited >= 120) { log(`Still at the ${max}-client limit after 2 min; stopping. Raise the limit in Settings or close some clients.`, 'error'); pushAccounts(); return; }
-        await new Promise(r => setTimeout(r, 1500));
+    // Guard against an accidental second click while a batch is still launching.
+    if (joinInProgress) { log('Already launching — ignoring the extra Join click.'); return; }
+    joinInProgress = true;
+    joinCancel = false;
+    send('joining', true);
+    try {
+      await ensureMultiRoblox();
+      const accounts = ids.map(id => vault.get(id)).filter(Boolean);
+      const max = Math.max(1, settings.maxActiveClients || 20);
+      for (let i = 0; i < accounts.length; i++) {
+        if (joinCancel) { log('Launch queue stopped.'); break; }
+        // Cap how many Roblox clients run at once.
+        for (let waited = 0; (await launcher.countRobloxClients().catch(() => 0)) >= max; waited += 1.5) {
+          if (joinCancel) break;
+          if (waited === 0) log(`Reached the ${max}-client limit — close a Roblox window to launch ${accounts[i].username}`);
+          if (waited >= 120) { log(`Still at the ${max}-client limit after 2 min; stopping.`, 'error'); joinCancel = true; break; }
+          await new Promise(r => setTimeout(r, 1500));
+        }
+        if (joinCancel) { log('Launch queue stopped.'); break; }
+        try {
+          await joinWith(accounts[i], { placeId, jobId, followUser });
+        } catch (e) {
+          log(`${accounts[i].username}: ${e.message}`, 'error');
+          if (e.status === 401) { vault.update(accounts[i].id, { valid: false }); pushAccounts(); }
+        }
+        if (i < accounts.length - 1) {
+          // Interruptible delay between accounts so Stop takes effect promptly.
+          for (let t = 0; t < settings.joinDelaySec * 1000 && !joinCancel; t += 200) await new Promise(r => setTimeout(r, 200));
+        }
       }
-      try {
-        await joinWith(accounts[i], { placeId, jobId, followUser });
-      } catch (e) {
-        log(`${accounts[i].username}: ${e.message}`, 'error');
-        if (e.status === 401) { vault.update(accounts[i].id, { valid: false }); pushAccounts(); }
-      }
-      if (i < accounts.length - 1) await new Promise(r => setTimeout(r, settings.joinDelaySec * 1000));
+      pushAccounts();
+      for (const delay of [4000, 9000, 15000]) setTimeout(pollPresence, delay);
+    } finally {
+      joinInProgress = false;
+      send('joining', false);
     }
-    pushAccounts();
-    // Refresh online status a few times after launching so the dots flip quickly.
-    for (const delay of [4000, 9000, 15000]) setTimeout(pollPresence, delay);
   });
 
   handle('servers', async ({ placeId, cursor }) => {
@@ -769,7 +786,8 @@ function registerIpc() {
   });
 
   handle('roblox:closeAll', async () => {
-    const out = await launcher.countRobloxClients();
+    joinCancel = true; // stop any launch queue in progress
+    const out = await launcher.countRobloxClients().catch(() => 0);
     require('child_process').exec('taskkill /IM RobloxPlayerBeta.exe /F');
     return out;
   });
