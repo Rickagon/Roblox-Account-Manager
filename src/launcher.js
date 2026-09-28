@@ -127,6 +127,22 @@ Get-CimInstance Win32_Process -Filter "Name='RobloxPlayerBeta.exe'" | ForEach-Ob
   return m ? Number(m[0]) : 0;
 }
 
+/** Set the title-bar text of the Roblox window launched for this browserTrackerId. */
+async function labelWindow(browserTrackerId, label) {
+  await ps(`
+$ProgressPreference='SilentlyContinue'
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public static class RamWin { [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern bool SetWindowText(IntPtr h, string t); }
+"@ -ErrorAction SilentlyContinue
+$tid = $env:RAM_TID
+Get-CimInstance Win32_Process -Filter "Name='RobloxPlayerBeta.exe'" | Where-Object { $_.CommandLine -match ('(-b\s+|browsertrackerid[:=])' + [regex]::Escape($tid) + '\b') } | ForEach-Object {
+  $p = Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue
+  if ($p -and $p.MainWindowHandle -ne 0) { [RamWin]::SetWindowText($p.MainWindowHandle, $env:RAM_LABEL) | Out-Null }
+}`, { RAM_TID: String(browserTrackerId), RAM_LABEL: String(label) });
+}
+
 // ---- Multi-Roblox ----
 // Roblox refuses to start a second client while "ROBLOX_singletonMutex" is
 // held by another Roblox. Grabbing it ourselves first makes every client
@@ -180,6 +196,7 @@ module.exports = {
   closeClientsFor,
   countRobloxClients,
   killWindowlessClients,
+  labelWindow,
   enableMultiRoblox,
   disableMultiRoblox,
   isMultiRobloxEnabled,

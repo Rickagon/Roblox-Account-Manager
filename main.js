@@ -31,6 +31,7 @@ const DEFAULT_SETTINGS = {
   multiRoblox: true,
   closeLastOnLaunch: true,
   killClosedClients: true,
+  labelWindows: true,
   joinDelaySec: 8,
   shuffleJobId: false,
   showPresence: true,
@@ -383,6 +384,22 @@ async function joinWith(acc, opts) {
   await launcher.launchUri(launcher.buildLaunchUri(launch));
   vault.update(acc.id, { lastUse: new Date().toISOString() });
   log(`${acc.username}: launching`);
+
+  // Rename the Roblox window's title bar to the account name (re-applied for a
+  // while because Roblox resets its own title as the game loads).
+  if (settings.labelWindows !== false) labelClientWindow(acc);
+}
+
+const labelTimers = new Map();
+function labelClientWindow(acc) {
+  const label = `Roblox — ${acc.alias || acc.username}`;
+  clearInterval(labelTimers.get(acc.browserTrackerId));
+  const start = Date.now();
+  const timer = setInterval(async () => {
+    if (Date.now() - start > 90000) { clearInterval(timer); labelTimers.delete(acc.browserTrackerId); return; }
+    await launcher.labelWindow(acc.browserTrackerId, label).catch(() => {});
+  }, 5000);
+  labelTimers.set(acc.browserTrackerId, timer);
 }
 
 async function ensureMultiRoblox() {

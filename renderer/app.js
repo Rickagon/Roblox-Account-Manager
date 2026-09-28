@@ -713,6 +713,7 @@ function bind() {
     $('#s-multiRoblox').checked = s.multiRoblox;
     $('#s-closeLastOnLaunch').checked = s.closeLastOnLaunch;
     $('#s-killClosedClients').checked = s.killClosedClients !== false;
+    $('#s-labelWindows').checked = s.labelWindows !== false;
     $('#s-showPresence').checked = s.showPresence;
     $('#s-agingAlert').checked = s.agingAlert !== false;
     $('#s-runOnStartup').checked = s.runOnStartup;
@@ -729,6 +730,7 @@ function bind() {
       multiRoblox: $('#s-multiRoblox').checked,
       closeLastOnLaunch: $('#s-closeLastOnLaunch').checked,
       killClosedClients: $('#s-killClosedClients').checked,
+      labelWindows: $('#s-labelWindows').checked,
       showPresence: $('#s-showPresence').checked,
       agingAlert: $('#s-agingAlert').checked,
       runOnStartup: $('#s-runOnStartup').checked,
