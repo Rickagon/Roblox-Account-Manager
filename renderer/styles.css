@@ -488,6 +488,6 @@ table.servers th, table.servers td { padding: 4px 6px; }
 /* columns share space with fr so they compress on narrow windows, and the
    right-hand drag/select area is always at least ~70px */
 .thead, .trow { grid-template-columns: minmax(130px, 1.4fr) minmax(90px, 1fr) minmax(100px, 1.3fr) 56px minmax(70px, 0.6fr); }
-.trow .col-game { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.trow .col-game { color: var(--ok); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .pill { white-space: nowrap; }
