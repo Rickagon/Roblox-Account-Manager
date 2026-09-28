@@ -417,9 +417,10 @@ function startWindowLabeler() {
 }
 
 async function ensureMultiRoblox() {
-  if (!settings.multiRoblox || launcher.isMultiRobloxEnabled()) return;
+  if (!settings.multiRoblox || launcher.isMultiRobloxEnabled()) { send('multiRoblox', launcher.isMultiRobloxEnabled()); return; }
   const r = await launcher.enableMultiRoblox();
   if (!r.owned) log('Multi-Roblox could not start: another program already holds the Roblox lock. This is usually the old Roblox Account Manager (close it) or an open Roblox client. It will retry on your next launch.', 'error');
+  send('multiRoblox', launcher.isMultiRobloxEnabled());
 }
 
 // ---------- IPC ----------
@@ -454,7 +455,7 @@ function registerIpc() {
     if ('runOnStartup' in patch) syncLoginItem();
     if ('multiRoblox' in patch) {
       if (patch.multiRoblox) ensureMultiRoblox();
-      else launcher.disableMultiRoblox();
+      else { launcher.disableMultiRoblox(); send('multiRoblox', false); }
     }
     return settings;
   });

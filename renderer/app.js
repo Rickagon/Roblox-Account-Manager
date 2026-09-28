@@ -467,7 +467,8 @@ function saveTargets(now = false) {
 }
 
 function updateMultiStatus() {
-  const on = state.settings.multiRoblox;
+  // Reflect whether Multi-Roblox is actually active, not just the setting.
+  const on = !!state.multiRobloxActive;
   $('#multi-status').textContent = `Multi-Roblox: ${on ? 'on' : 'off'}`;
   $('#multi-status').classList.toggle('on', on);
 }
@@ -756,6 +757,7 @@ window.ram.onAccounts(list => {
 });
 window.ram.onPresence(p => { state.presence = p; if (!isDragging) applyPresence(); });
 window.ram.onLog(({ msg, level }) => log(msg, level === 'error' ? 'error' : 'info'));
+window.ram.onMultiRoblox(active => { state.multiRobloxActive = active; updateMultiStatus(); });
 window.ram.onJoining(active => {
   const btn = $('#btn-join');
   btn.disabled = active;              // can't accidentally re-launch mid-batch
@@ -775,6 +777,7 @@ window.ram.onJoining(active => {
     return;
   }
   state.settings = init.settings;
+  state.multiRobloxActive = init.multiRoblox;
   state.accounts = init.accounts || [];
 
   $('#place-id').value = state.settings.savedPlaceId || '';

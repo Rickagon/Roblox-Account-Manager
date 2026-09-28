@@ -42,4 +42,5 @@ contextBridge.exposeInMainWorld('ram', {
   onLog: fn => on('log', fn),
   onKeepAlive: fn => on('keepalive', fn),
   onJoining: fn => on('joining', fn),
+  onMultiRoblox: fn => on('multiRoblox', fn),
 });
