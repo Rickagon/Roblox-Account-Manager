@@ -432,15 +432,18 @@ async function setPasswordSelected() {
 
 // ---------- place panel ----------
 
-let placeLookup;
+let placeLookup, placeLookupSeq = 0;
 function updatePlaceName() {
   clearTimeout(placeLookup);
-  const id = $('#place-id').value.trim().match(/(?:games\/)?(\d{3,})/)?.[1];
-  if (!id) { $('#place-name').textContent = '—'; return; }
+  const place = $('#place-id').value.trim();
+  const job = $('#job-id').value.trim();
+  if (!place && !job) { $('#place-name').textContent = '—'; return; }
   $('#place-name').textContent = '…';
+  const seq = ++placeLookupSeq;
   placeLookup = setTimeout(async () => {
-    const r = await window.ram.placeInfo(id);
-    if ($('#place-id').value.includes(id)) $('#place-name').textContent = r.ok && r.data ? r.data.name : 'Unknown place';
+    const r = await window.ram.resolvePlace(place, job);
+    if (seq !== placeLookupSeq) return; // a newer edit superseded this lookup
+    $('#place-name').textContent = r.ok && r.data ? r.data.name : (place || job ? 'Unknown place' : '—');
   }, 400);
 }
 
@@ -662,7 +665,7 @@ function bind() {
   });
 
   $('#place-id').oninput = () => { updatePlaceName(); saveTargets(); };
-  $('#job-id').oninput = saveTargets;
+  $('#job-id').oninput = () => { updatePlaceName(); saveTargets(); };
   $('#follow-user').oninput = saveTargets;
   for (const id of ['#place-id', '#job-id', '#follow-user']) $(id).onchange = () => saveTargets(true);
   $('#btn-join').onclick = run(doJoin);

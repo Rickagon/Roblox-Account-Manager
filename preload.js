@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('ram', {
   setPassword: (id, pw) => call('account:setPassword', id, pw),
   updateMany: (ids, patch) => call('account:updateMany', ids, patch),
   placeInfo: placeId => call('place:info', placeId),
+  resolvePlace: (placeId, jobId) => call('place:resolve', { placeId, jobId }),
   summary: id => call('account:summary', id),
   setDisplayName: (ids, name) => call('account:setDisplayName', ids, name),
   changePassword: (ids, cur, next) => call('account:changePassword', ids, cur, next),

@@ -611,6 +611,23 @@ function registerIpc() {
     return d ? { name: d.name, builder: d.builder } : null;
   });
 
+  // Work out the place (id + name) from whatever is in the Place ID / Job ID
+  // boxes, resolving a share link or private/VIP link to its place.
+  handle('place:resolve', async ({ placeId, jobId }) => {
+    const client = anyValidClient();
+    let id = 0;
+    try {
+      const t = parseTarget(placeId, jobId);
+      if (t) {
+        if (t.shareCode) id = (await client.resolveShareLink(t.shareCode)).placeId;
+        else id = t.placeId;
+      }
+    } catch { /* bad/partial link -> no place yet */ }
+    if (!id) return null;
+    const d = await client.getPlaceDetails(id).catch(() => null);
+    return { placeId: id, name: d?.name || `Place ${id}` };
+  });
+
   handle('account:setPassword', (id, password) => {
     vault.update(id, { password });
     pushAccounts();
