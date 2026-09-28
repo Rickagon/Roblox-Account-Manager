@@ -127,20 +127,59 @@ Get-CimInstance Win32_Process -Filter "Name='RobloxPlayerBeta.exe'" | ForEach-Ob
   return m ? Number(m[0]) : 0;
 }
 
-/** Set the title-bar text of the Roblox window launched for this browserTrackerId. */
-async function labelWindow(browserTrackerId, label) {
+// Modern Roblox doesn't put an account id in the client process, so windows are
+// matched to accounts by launch order instead: list the current game windows,
+// and the app assigns each new one the next queued account name.
+
+/** Visible top-level windows owned by RobloxPlayerBeta -> [{ hwnd, title }]. */
+async function listRobloxWindows() {
+  const out = await ps(`
+$ProgressPreference='SilentlyContinue'
+Add-Type @"
+using System;using System.Text;using System.Runtime.InteropServices;
+public class RamEnum {
+ [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindowsProc cb, IntPtr l);
+ [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
+ [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetWindowText(IntPtr h, StringBuilder s, int n);
+ [DllImport("user32.dll")] public static extern int GetWindowThreadProcessId(IntPtr h, out int pid);
+ public delegate bool EnumWindowsProc(IntPtr h, IntPtr l);
+}
+"@ -ErrorAction SilentlyContinue
+$lines = New-Object System.Collections.ArrayList
+$cb = [RamEnum+EnumWindowsProc]{ param($h,$l)
+  if ([RamEnum]::IsWindowVisible($h)) {
+    $procId = 0
+    [RamEnum]::GetWindowThreadProcessId($h, [ref]$procId) | Out-Null
+    $p = Get-Process -Id $procId -ErrorAction SilentlyContinue
+    if ($p -and $p.ProcessName -eq 'RobloxPlayerBeta') {
+      $sb = New-Object System.Text.StringBuilder 256
+      [RamEnum]::GetWindowText($h, $sb, 256) | Out-Null
+      [void]$lines.Add(("{0}\`t{1}" -f ([Int64]$h), $sb.ToString()))
+    }
+  }
+  return $true
+}
+[RamEnum]::EnumWindows($cb, [IntPtr]::Zero) | Out-Null
+$lines -join "\`n"`);
+  return String(out).split('\n').map(l => l.trim()).filter(Boolean).map(l => {
+    const i = l.indexOf('\t');
+    return i === -1 ? { hwnd: l, title: '' } : { hwnd: l.slice(0, i), title: l.slice(i + 1) };
+  });
+}
+
+/** Apply { hwnd: title } to those windows in one call. */
+async function applyWindowTitles(map) {
+  if (!map || !Object.keys(map).length) return;
   await ps(`
 $ProgressPreference='SilentlyContinue'
 Add-Type @"
-using System;
-using System.Runtime.InteropServices;
-public static class RamWin { [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern bool SetWindowText(IntPtr h, string t); }
+using System;using System.Runtime.InteropServices;
+public class RamSet { [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern bool SetWindowText(IntPtr h, string t); }
 "@ -ErrorAction SilentlyContinue
-$tid = $env:RAM_TID
-Get-CimInstance Win32_Process -Filter "Name='RobloxPlayerBeta.exe'" | Where-Object { $_.CommandLine -match ('(-b\s+|browsertrackerid[:=])' + [regex]::Escape($tid) + '\b') } | ForEach-Object {
-  $p = Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue
-  if ($p -and $p.MainWindowHandle -ne 0) { [RamWin]::SetWindowText($p.MainWindowHandle, $env:RAM_LABEL) | Out-Null }
-}`, { RAM_TID: String(browserTrackerId), RAM_LABEL: String(label) });
+$m = $env:RAM_TITLES | ConvertFrom-Json
+foreach ($prop in $m.PSObject.Properties) {
+  [RamSet]::SetWindowText([IntPtr][Int64]$prop.Name, [string]$prop.Value) | Out-Null
+}`, { RAM_TITLES: JSON.stringify(map) });
 }
 
 // ---- Multi-Roblox ----
@@ -196,7 +235,8 @@ module.exports = {
   closeClientsFor,
   countRobloxClients,
   killWindowlessClients,
-  labelWindow,
+  listRobloxWindows,
+  applyWindowTitles,
   enableMultiRoblox,
   disableMultiRoblox,
   isMultiRobloxEnabled,

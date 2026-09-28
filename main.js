@@ -385,21 +385,35 @@ async function joinWith(acc, opts) {
   vault.update(acc.id, { lastUse: new Date().toISOString() });
   log(`${acc.username}: launching`);
 
-  // Rename the Roblox window's title bar to the account name (re-applied for a
-  // while because Roblox resets its own title as the game loads).
-  if (settings.labelWindows !== false) labelClientWindow(acc);
+  // Queue this account's name to label the next Roblox window that appears.
+  if (settings.labelWindows !== false) { pendingWindowLabels.push(`Roblox — ${acc.alias || acc.username}`); startWindowLabeler(); }
 }
 
-const labelTimers = new Map();
-function labelClientWindow(acc) {
-  const label = `Roblox — ${acc.alias || acc.username}`;
-  clearInterval(labelTimers.get(acc.browserTrackerId));
-  const start = Date.now();
-  const timer = setInterval(async () => {
-    if (Date.now() - start > 90000) { clearInterval(timer); labelTimers.delete(acc.browserTrackerId); return; }
-    await launcher.labelWindow(acc.browserTrackerId, label).catch(() => {});
-  }, 5000);
-  labelTimers.set(acc.browserTrackerId, timer);
+// Windows are matched to accounts by launch order (Roblox no longer exposes an
+// account id in the client). Each new game window gets the next queued name;
+// names are re-applied because Roblox resets its own title while loading.
+const pendingWindowLabels = [];
+const labeledWindows = new Map(); // hwnd -> label
+let windowLabelTimer = null;
+function startWindowLabeler() {
+  if (windowLabelTimer) return;
+  windowLabelTimer = setInterval(async () => {
+    try {
+      const wins = await launcher.listRobloxWindows();
+      const live = new Set(wins.map(w => w.hwnd));
+      for (const h of [...labeledWindows.keys()]) if (!live.has(h)) labeledWindows.delete(h);
+      for (const w of wins) {
+        if (!labeledWindows.has(w.hwnd) && pendingWindowLabels.length) labeledWindows.set(w.hwnd, pendingWindowLabels.shift());
+      }
+      const apply = {};
+      for (const w of wins) {
+        const label = labeledWindows.get(w.hwnd);
+        if (label && w.title !== label) apply[w.hwnd] = label;
+      }
+      if (Object.keys(apply).length) await launcher.applyWindowTitles(apply);
+      if (!pendingWindowLabels.length && !labeledWindows.size) { clearInterval(windowLabelTimer); windowLabelTimer = null; }
+    } catch { /* transient */ }
+  }, 3000);
 }
 
 async function ensureMultiRoblox() {
