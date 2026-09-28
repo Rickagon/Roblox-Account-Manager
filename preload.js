@@ -35,6 +35,7 @@ contextBridge.exposeInMainWorld('ram', {
   pickRamFile: () => call('import:pick'),
   importRam: file => call('import:ram', file),
   openExternal: url => call('open:external', url),
+  openRepo: () => call('open:repo'),
 
   onAccounts: fn => on('accounts', fn),
   onPresence: fn => on('presence', fn),

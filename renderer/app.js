@@ -800,6 +800,8 @@ window.ram.onJoining(active => {
   }
   state.settings = init.settings;
   state.multiRobloxActive = init.multiRoblox;
+  if (init.version) $('#about-version').textContent = 'v' + init.version;
+  $('#about-repo').onclick = e => { e.preventDefault(); window.ram.openRepo(); };
   state.accounts = init.accounts || [];
 
   $('#place-id').value = state.settings.savedPlaceId || '';

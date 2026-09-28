@@ -464,6 +464,7 @@ function registerIpc() {
       recent: recentGames,
       multiRoblox: launcher.isMultiRobloxEnabled(),
       defaultRamFile: fs.existsSync(path.join(DEFAULT_RAM_DIR, 'AccountData.json')) ? path.join(DEFAULT_RAM_DIR, 'AccountData.json') : '',
+      version: app.getVersion(),
     };
   });
 
@@ -832,6 +833,8 @@ function registerIpc() {
     });
     return { added, updated };
   });
+
+  handle('open:repo', () => { shell.openExternal('https://github.com/Rickagon/RobloxAccountManagerV2'); });
 
   handle('open:external', url => {
     if (/^https:\/\/(www\.)?roblox\.com\//.test(url)) shell.openExternal(url);

@@ -500,3 +500,7 @@ table.servers th, table.servers td { padding: 4px 6px; }
 .c-ingame { color: var(--ok); }
 .c-online { color: var(--warn); }
 .c-dead { color: var(--danger); }
+
+.about { margin-top: 10px; text-align: center; }
+.about a { color: var(--accent); text-decoration: none; }
+.about a:hover { text-decoration: underline; }
