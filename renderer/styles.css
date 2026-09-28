@@ -491,3 +491,7 @@ table.servers th, table.servers td { padding: 4px 6px; }
 .trow .col-game { color: var(--ok); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .pill { white-space: nowrap; }
+
+/* alias expands into the Game column when the account isn't in a game */
+.trow:not(.in-game) .col-game { display: none; }
+.trow:not(.in-game) .col-alias { grid-column: 2 / 4; }

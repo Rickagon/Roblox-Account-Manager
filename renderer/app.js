@@ -169,6 +169,8 @@ function applyPresence() {
     const game = p?.userPresenceType === 2 ? (p.lastLocation || 'In game') : (p?.userPresenceType === 3 ? 'Studio' : '');
     cell.textContent = game;
     cell.title = game;
+    // No game -> let the alias use this column's space (see CSS .in-game).
+    cell.closest('.trow')?.classList.toggle('in-game', !!game);
   }
 }
 
