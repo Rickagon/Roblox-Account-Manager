@@ -419,7 +419,7 @@ function startWindowLabeler() {
 async function ensureMultiRoblox() {
   if (!settings.multiRoblox || launcher.isMultiRobloxEnabled()) { send('multiRoblox', launcher.isMultiRobloxEnabled()); return; }
   const r = await launcher.enableMultiRoblox();
-  if (!r.owned) log('Multi-Roblox could not start: another program already holds the Roblox lock. This is usually the old Roblox Account Manager (close it) or an open Roblox client. It will retry on your next launch.', 'error');
+  if (!r.enabled) log('Multi-Roblox could not start. Close the old Roblox Account Manager if it is running, then reopen this app.', 'error');
   send('multiRoblox', launcher.isMultiRobloxEnabled());
 }
 

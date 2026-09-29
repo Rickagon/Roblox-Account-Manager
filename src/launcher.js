@@ -253,36 +253,52 @@ $lines -join "\`n"`);
 // believe it's the only one. Nothing is injected into Roblox.
 
 let mutexHolder = null;
+let mutexStopping = false;
 
-function enableMultiRoblox() {
-  if (mutexHolder) return Promise.resolve({ enabled: true, owned: true });
+// A background PowerShell process holds Roblox's single-instance handles for the
+// whole session. It keeps a handle whether or not it created them, so even if a
+// Roblox is already running (it owns them first) the handles stay alive once we
+// hold them, letting extra clients launch.
+function spawnHolder() {
   const script = `
-$created = $false
-$m = [System.Threading.Mutex]::new($true, 'ROBLOX_singletonMutex', [ref]$created)
-if ($created) { [Console]::Out.WriteLine('OWNED') } else { [Console]::Out.WriteLine('EXISTS') }
+$c1=$false; $c2=$false
+$m = [System.Threading.Mutex]::new($true, 'ROBLOX_singletonMutex', [ref]$c1)
+try { $e = [System.Threading.EventWaitHandle]::new($false, [System.Threading.EventResetMode]::AutoReset, 'ROBLOX_singletonEvent', [ref]$c2) } catch { }
+[Console]::Out.WriteLine('HELD')
 [Console]::Out.Flush()
 [void][Console]::In.ReadLine()
-$m.ReleaseMutex()
+try { $m.ReleaseMutex() } catch { }
 `;
   const encoded = Buffer.from(script, 'utf16le').toString('base64');
-  const child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded], {
+  return spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded], {
     stdio: ['pipe', 'pipe', 'ignore'],
     windowsHide: true,
   });
-  mutexHolder = child;
-  child.on('exit', () => { if (mutexHolder === child) mutexHolder = null; });
+}
 
+function enableMultiRoblox() {
+  if (mutexHolder) return Promise.resolve({ enabled: true, owned: true });
+  mutexStopping = false;
+  const child = spawnHolder();
+  mutexHolder = child;
+  child.on('exit', () => {
+    if (mutexHolder !== child) return;
+    mutexHolder = null;
+    // Persistent: if it dies unexpectedly, grab the lock again.
+    if (!mutexStopping) setTimeout(() => { if (!mutexHolder && !mutexStopping) enableMultiRoblox(); }, 1000);
+  });
   return new Promise(resolve => {
-    child.stdout.once('data', buf => {
-      const owned = buf.toString().includes('OWNED');
-      if (!owned) disableMultiRoblox();
-      resolve({ enabled: owned, owned });
-    });
+    let done = false;
+    const finish = r => { if (!done) { done = true; resolve(r); } };
+    child.stdout.once('data', () => finish({ enabled: true, owned: true }));
+    child.on('exit', () => finish({ enabled: false, owned: false }));
+    setTimeout(() => finish({ enabled: !!mutexHolder, owned: !!mutexHolder }), 4000);
   });
 }
 
 function disableMultiRoblox() {
   if (!mutexHolder) return;
+  mutexStopping = true;
   const child = mutexHolder;
   mutexHolder = null;
   try { child.stdin.end('\n'); } catch { /* ignore */ }
