@@ -182,6 +182,71 @@ foreach ($prop in $m.PSObject.Properties) {
 }`, { RAM_TITLES: JSON.stringify(map) });
 }
 
+/**
+ * Map each visible Roblox game window to the real Roblox userId of the account
+ * running it, by matching the window's process start time to its session log
+ * (whose GameJoinLoadTime line contains "userid:<id>"). Returns [{hwnd, userid}].
+ * This is exact regardless of load order.
+ */
+async function getWindowAccounts() {
+  const out = await ps(`
+$ProgressPreference='SilentlyContinue'
+Add-Type @"
+using System;using System.Runtime.InteropServices;
+public class RamWA {
+ [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindowsProc cb, IntPtr l);
+ [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
+ [DllImport("user32.dll")] public static extern int GetWindowThreadProcessId(IntPtr h, out int pid);
+ public delegate bool EnumWindowsProc(IntPtr h, IntPtr l);
+}
+"@ -ErrorAction SilentlyContinue
+
+$wins = New-Object System.Collections.ArrayList
+$cb = [RamWA+EnumWindowsProc]{ param($h,$l)
+  if ([RamWA]::IsWindowVisible($h)) {
+    $procId = 0
+    [RamWA]::GetWindowThreadProcessId($h, [ref]$procId) | Out-Null
+    $p = Get-Process -Id $procId -ErrorAction SilentlyContinue
+    if ($p -and $p.ProcessName -eq 'RobloxPlayerBeta') { [void]$wins.Add([pscustomobject]@{ hwnd=[Int64]$h; procId=$procId }) }
+  }
+  return $true
+}
+[RamWA]::EnumWindows($cb, [IntPtr]::Zero) | Out-Null
+if ($wins.Count -eq 0) { return }
+
+$create = @{}
+Get-CimInstance Win32_Process -Filter "Name='RobloxPlayerBeta.exe'" | ForEach-Object {
+  $create[[int]$_.ProcessId] = [datetimeoffset]($_.CreationDate.ToUniversalTime())
+}
+
+$logdir = Join-Path $env:LOCALAPPDATA 'Roblox\\logs'
+$logs = New-Object System.Collections.ArrayList
+Get-ChildItem $logdir -Filter '*.log' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 60 | ForEach-Object {
+  if ($_.Name -match '(\\d{8}T\\d{6}Z)') {
+    try { $t = [datetimeoffset]::ParseExact($matches[1],'yyyyMMddTHHmmssZ',$null,[System.Globalization.DateTimeStyles]::AssumeUniversal) } catch { $t = [datetimeoffset]$_.CreationTimeUtc }
+    $m = Select-String -Path $_.FullName -Pattern 'userid:(\\d+)' -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($m) { [void]$logs.Add([pscustomobject]@{ time=$t; uid=$m.Matches[0].Groups[1].Value }) }
+  }
+}
+
+$lines = New-Object System.Collections.ArrayList
+foreach ($w in $wins) {
+  $pc = $create[[int]$w.procId]
+  if (-not $pc) { continue }
+  $best = $null; $bestDiff = [double]::MaxValue
+  foreach ($li in $logs) {
+    $d = [math]::Abs(($li.time - $pc).TotalSeconds)
+    if ($d -lt $bestDiff) { $bestDiff = $d; $best = $li }
+  }
+  if ($best -and $bestDiff -le 120) { [void]$lines.Add(("{0}\`t{1}" -f $w.hwnd, $best.uid)) }
+}
+$lines -join "\`n"`);
+  return String(out).split('\n').map(l => l.trim()).filter(Boolean).map(l => {
+    const i = l.indexOf('\t');
+    return i === -1 ? null : { hwnd: l.slice(0, i), userid: l.slice(i + 1) };
+  }).filter(Boolean);
+}
+
 // ---- Multi-Roblox ----
 // Roblox refuses to start a second client while "ROBLOX_singletonMutex" is
 // held by another Roblox. Grabbing it ourselves first makes every client
@@ -237,6 +302,7 @@ module.exports = {
   killWindowlessClients,
   listRobloxWindows,
   applyWindowTitles,
+  getWindowAccounts,
   enableMultiRoblox,
   disableMultiRoblox,
   isMultiRobloxEnabled,
