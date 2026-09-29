@@ -251,7 +251,7 @@ label.check.inline { margin: 0 4px; font-size: 12px; }
 /* ---------- side panel ---------- */
 .current-place { display: flex; flex-direction: column; margin-bottom: 4px; }
 .current-place .muted { font-size: 11px; }
-#place-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#place-name { font-weight: 600; color: var(--ok); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .grid-2 { display: grid; grid-template-columns: 1fr 1.4fr; gap: 8px; }
 .grid-2 label { margin: 4px 0; }
 .input-btns { display: flex; gap: 4px; margin-top: 4px; }
