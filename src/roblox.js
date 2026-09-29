@@ -122,6 +122,13 @@ class RobloxClient {
     return true;
   }
 
+  /** Invalidate this cookie's session on Roblox's side. */
+  async logout() {
+    const res = await this.request('https://auth.roblox.com/v2/logout', { method: 'POST', body: {} });
+    if (res.status === 200) return true;
+    throw new Error(`logout returned ${res.status}`);
+  }
+
   /**
    * One-time launch ticket. Since 2026-09-23 roblox.com fetches a client
    * assertion first and posts it as the ticket request body.

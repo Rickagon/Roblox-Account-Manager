@@ -21,7 +21,7 @@ contextBridge.exposeInMainWorld('ram', {
   setDisplayName: (ids, name) => call('account:setDisplayName', ids, name),
   changePassword: (ids, cur, next) => call('account:changePassword', ids, cur, next),
   setJoinPrivacy: (ids, value) => call('account:setJoinPrivacy', ids, value),
-  removeAccounts: ids => call('account:remove', ids),
+  removeAccounts: (ids, doLogout) => call('account:remove', ids, doLogout),
   reorder: ids => call('account:reorder', ids),
   copy: (id, what) => call('account:copy', id, what),
   copyMany: (ids, what) => call('account:copyMany', ids, what),

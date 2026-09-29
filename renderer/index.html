@@ -197,8 +197,9 @@
   <!-- Remove confirmation -->
   <dialog id="dlg-remove" class="dialog">
     <div class="dialog-head"><h3 id="remove-title">Remove accounts?</h3></div>
-    <p class="muted small-text">This only removes them from this app. The Roblox accounts are not affected.</p>
+    <p class="muted small-text">Removes them from this app. Your Roblox accounts are not deleted.</p>
     <div id="remove-list" class="confirm-list"></div>
+    <label class="check"><input type="checkbox" id="remove-logout" checked> Log out these sessions (invalidates the saved login)</label>
     <div class="row end"><button data-close>Cancel</button><button id="remove-confirm" class="danger">Remove</button></div>
   </dialog>
 

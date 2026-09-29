@@ -668,10 +668,22 @@ function registerIpc() {
     pushAccounts();
   });
 
-  handle('account:remove', ids => {
+  handle('account:remove', async (ids, doLogout = true) => {
     // Confirmation is handled by an in-app dialog in the renderer.
-    for (const id of ids) vault.remove(id);
-    pushAccounts();
+    for (const id of ids) {
+      const acc = vault.get(id);
+      if (!acc) continue;
+      if (doLogout && acc.valid && acc.cookie) {
+        try { await clientFor(acc).logout(); log(`${acc.username}: logged out`); }
+        catch (e) { log(`${acc.username}: log out failed (${e.message})`, 'error'); }
+      }
+      // Clean up the leftover browser profile folder.
+      const dir = acc.profileDir || path.join(PROFILES_DIR, acc.id);
+      try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* ignore */ }
+      clients.delete(id);
+      vault.remove(id);
+      pushAccounts();
+    }
     return true;
   });
 

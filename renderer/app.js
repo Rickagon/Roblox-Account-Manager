@@ -447,9 +447,10 @@ function removeSelected() {
   $('#remove-title').textContent = `Remove ${accs.length} account${accs.length > 1 ? 's' : ''}?`;
   $('#remove-list').replaceChildren(...accs.map(a => el('div', { class: 'ci-row' }, a.username)));
   $('#remove-confirm').onclick = run(async () => {
+    const doLogout = $('#remove-logout').checked;
     dlg.close();
     const ids = accs.map(a => a.id);
-    if (await api(window.ram.removeAccounts(ids))) { state.selected.clear(); renderEditor(); log(`Removed ${ids.length} account${ids.length > 1 ? 's' : ''}`); }
+    if (await api(window.ram.removeAccounts(ids, doLogout))) { state.selected.clear(); renderEditor(); log(`Removed ${ids.length} account${ids.length > 1 ? 's' : ''}${doLogout ? ' (logged out)' : ''}`); }
   });
   dlg.showModal();
 }
