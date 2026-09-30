@@ -441,7 +441,19 @@ async function ensureMultiRoblox() {
   if (!settings.multiRoblox || launcher.isMultiRobloxEnabled()) { send('multiRoblox', launcher.isMultiRobloxEnabled()); return; }
   const r = await launcher.enableMultiRoblox();
   if (!r.enabled) log('Multi-Roblox could not start. Close the old Roblox Account Manager if it is running, then reopen this app.', 'error');
+  else if (!r.owned) log('Multi-Roblox: a Roblox client is already running, so the app could not take the lock first. Close ALL Roblox windows, then it will grab it — after that you can launch multiple.', 'error');
   send('multiRoblox', launcher.isMultiRobloxEnabled());
+}
+
+// If no Roblox is running, (re)grab the lock so the app OWNS it before launches.
+async function grabLockIfClear() {
+  if (!settings.multiRoblox) return;
+  const procs = await launcher.listRobloxProcesses().catch(() => [{}]);
+  if (procs.length === 0) {
+    launcher.disableMultiRoblox();
+    await new Promise(r => setTimeout(r, 300));
+    await ensureMultiRoblox();
+  }
 }
 
 // ---------- IPC ----------
@@ -751,6 +763,7 @@ function registerIpc() {
     joinCancel = false;
     send('joining', true);
     try {
+      await grabLockIfClear(); // own the lock first if nothing is running yet
       await ensureMultiRoblox();
       const accounts = ids.map(id => vault.get(id)).filter(Boolean);
       const max = Math.max(1, settings.maxActiveClients || 20);

@@ -264,7 +264,7 @@ function spawnHolder() {
 $c1=$false; $c2=$false
 $m = [System.Threading.Mutex]::new($true, 'ROBLOX_singletonMutex', [ref]$c1)
 try { $e = [System.Threading.EventWaitHandle]::new($false, [System.Threading.EventResetMode]::AutoReset, 'ROBLOX_singletonEvent', [ref]$c2) } catch { }
-[Console]::Out.WriteLine('HELD')
+if ($c1) { [Console]::Out.WriteLine('OWNED') } else { [Console]::Out.WriteLine('EXISTS') }
 [Console]::Out.Flush()
 [void][Console]::In.ReadLine()
 try { $m.ReleaseMutex() } catch { }
@@ -290,9 +290,9 @@ function enableMultiRoblox() {
   return new Promise(resolve => {
     let done = false;
     const finish = r => { if (!done) { done = true; resolve(r); } };
-    child.stdout.once('data', () => finish({ enabled: true, owned: true }));
+    child.stdout.once('data', buf => finish({ enabled: true, owned: buf.toString().includes('OWNED') }));
     child.on('exit', () => finish({ enabled: false, owned: false }));
-    setTimeout(() => finish({ enabled: !!mutexHolder, owned: !!mutexHolder }), 4000);
+    setTimeout(() => finish({ enabled: !!mutexHolder, owned: false }), 4000);
   });
 }
 
