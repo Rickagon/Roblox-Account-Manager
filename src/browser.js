@@ -13,8 +13,9 @@ chromium.use(stealth);
 const open = new Map(); // profileDir -> BrowserContext
 
 // Prepare a profile before launch: turn off Chrome's "Save password?" prompt
-// (the app stores passwords itself) and mark the last session as clean so the
-// "Chrome didn't shut down correctly / Restore pages?" bubble never appears.
+// (the app stores passwords itself), mark the last session clean so no
+// "Restore pages?" bubble, and pre-trust the roblox-player protocol from
+// roblox.com so the "Open Roblox Game Client?" dialog never appears.
 function disablePasswordPrompts(profileDir) {
   const dir = path.join(profileDir, 'Default');
   const file = path.join(dir, 'Preferences');
@@ -29,6 +30,13 @@ function disablePasswordPrompts(profileDir) {
     exit_type: 'Normal',      // pretend last exit was clean -> no "Restore pages?" prompt
     exited_cleanly: true,
   };
+  // Auto-allow the roblox-player protocol from Roblox's site (the "Open Roblox
+  // Game Client?" confirmation) for these origins.
+  const pairs = { ...((prefs.protocol_handler && prefs.protocol_handler.allowed_origin_protocol_pairs) || {}) };
+  for (const origin of ['https://www.roblox.com', 'https://roblox.com']) {
+    pairs[origin] = { ...(pairs[origin] || {}), 'roblox-player': true };
+  }
+  prefs.protocol_handler = { ...(prefs.protocol_handler || {}), allowed_origin_protocol_pairs: pairs };
   try {
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(file, JSON.stringify(prefs));
