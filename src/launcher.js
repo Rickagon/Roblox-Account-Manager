@@ -110,21 +110,21 @@ async function countRobloxClients() {
  * younger than minAgeSec so ones still loading (no window yet) aren't killed.
  * Returns how many it killed.
  */
-async function killWindowlessClients(minAgeSec = 40) {
+/** All RobloxPlayerBeta processes -> [{ pid, hasWindow }]. */
+async function listRobloxProcesses() {
   const out = await ps(`
 $ProgressPreference='SilentlyContinue'
-$killed = 0
-Get-CimInstance Win32_Process -Filter "Name='RobloxPlayerBeta.exe'" | ForEach-Object {
-  $p = Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue
-  $age = ((Get-Date) - $_.CreationDate).TotalSeconds
-  if ($p -and $p.MainWindowHandle -eq 0 -and $age -gt ${minAgeSec}) {
-    Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
-    $killed++
-  }
+Get-Process RobloxPlayerBeta -ErrorAction SilentlyContinue | ForEach-Object { "{0}\`t{1}" -f $_.Id, ([int]($_.MainWindowHandle -ne 0)) }`);
+  return String(out).split('\n').map(l => l.trim()).filter(Boolean).map(l => {
+    const [pid, w] = l.split('\t');
+    return { pid, hasWindow: w === '1' };
+  });
 }
-[Console]::Out.Write($killed)`);
-  const m = String(out).match(/\d+/);
-  return m ? Number(m[0]) : 0;
+
+/** Force-kill the given process ids. */
+async function killProcesses(pids) {
+  if (!pids || !pids.length) return;
+  await ps(`Stop-Process -Id ${pids.map(Number).filter(Boolean).join(',')} -Force -ErrorAction SilentlyContinue`);
 }
 
 // Modern Roblox doesn't put an account id in the client process, so windows are
@@ -315,7 +315,8 @@ module.exports = {
   launchUri,
   closeClientsFor,
   countRobloxClients,
-  killWindowlessClients,
+  listRobloxProcesses,
+  killProcesses,
   listRobloxWindows,
   applyWindowTitles,
   getWindowAccounts,

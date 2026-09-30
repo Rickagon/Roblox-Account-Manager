@@ -264,18 +264,39 @@ async function pollPresence() {
 }
 
 let zombieTimer;
+const seenWithWindow = new Set();   // pids that have had a game window at some point
+const windowlessSince = new Map();  // pid -> when it went windowless after having a window
 function restartTimers() {
   clearInterval(presenceTimer);
   clearInterval(keepAliveTimer);
   clearInterval(zombieTimer);
   presenceTimer = setInterval(pollPresence, Math.max(3, settings.presenceIntervalSec) * 1000);
   keepAliveTimer = setInterval(() => keepAlive(false), 60 * 60 * 1000);
-  // Clean up Roblox clients you closed but that never exited.
+  // Clean up ONLY clients that had a game window and then lost it (you closed
+  // them) but whose process kept running. Clients still loading (never had a
+  // window) and in-game clients are never touched.
   if (settings.killClosedClients !== false) {
     zombieTimer = setInterval(async () => {
-      const n = await launcher.killWindowlessClients(40).catch(() => 0);
-      if (n) log(`Closed ${n} leftover Roblox client${n > 1 ? 's' : ''} that didn't exit`);
-    }, 15000);
+      try {
+        const procs = await launcher.listRobloxProcesses();
+        const alive = new Set(procs.map(p => p.pid));
+        for (const pid of [...seenWithWindow]) if (!alive.has(pid)) seenWithWindow.delete(pid);
+        for (const pid of [...windowlessSince.keys()]) if (!alive.has(pid)) windowlessSince.delete(pid);
+        const now = Date.now();
+        const kill = [];
+        for (const p of procs) {
+          if (p.hasWindow) { seenWithWindow.add(p.pid); windowlessSince.delete(p.pid); continue; }
+          if (!seenWithWindow.has(p.pid)) continue; // never had a window -> loading/tray, leave it
+          if (!windowlessSince.has(p.pid)) windowlessSince.set(p.pid, now);
+          else if (now - windowlessSince.get(p.pid) >= 20000) kill.push(p.pid); // window gone 20s+
+        }
+        if (kill.length) {
+          await launcher.killProcesses(kill);
+          kill.forEach(pid => { seenWithWindow.delete(pid); windowlessSince.delete(pid); });
+          log(`Closed ${kill.length} leftover Roblox client${kill.length > 1 ? 's' : ''} that didn't exit`);
+        }
+      } catch { /* transient */ }
+    }, 10000);
   }
 }
 

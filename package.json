@@ -1,13 +1,13 @@
 {
   "name": "roblox-account-manager-v2",
-  "version": "1.0.26",
+  "version": "1.0.27",
   "private": true,
   "description": "Modern Roblox account manager",
   "author": "RAM v2",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "pack": "electron-packager . \"Roblox Account Manager\" --platform=win32 --arch=x64 --icon=assets/icon.ico --out=dist --overwrite --app-version=1.0.26",
+    "pack": "electron-packager . \"Roblox Account Manager\" --platform=win32 --arch=x64 --icon=assets/icon.ico --out=dist --overwrite --app-version=1.0.27",
     "dist": "electron-builder"
   },
   "build": {
