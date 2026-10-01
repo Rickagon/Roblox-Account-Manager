@@ -134,49 +134,68 @@ async function login(profilesRoot, { username = '', password = '', window: win }
   await applyCss();
 
   if (username) {
-    // Roblox's login form is a React app that re-renders a moment after it first
-    // appears, which can wipe text typed too early — that's why the username
-    // sometimes came up blank. So: wait for each field to be editable, set it,
-    // let React commit, and verify it stuck (retrying); then re-check BOTH fields
-    // right before submitting and refill whatever got cleared, so it never
-    // clicks Log In with an empty box.
+    // Roblox's bot check (Arkose/FunCaptcha) triggers on robotic input — an
+    // instant fill() (looks pasted/injected) and an immediate click. A MANUAL
+    // login rarely gets a captcha because a person types with real keystrokes,
+    // moves the mouse, and pauses. So mimic that: real mouse click to focus,
+    // char-by-char typing with jittered delays, little pauses, and a human beat
+    // before submitting. (We still verify the value stuck, since Roblox's React
+    // form can wipe text typed too early, and fall back to fill() only as a last
+    // resort so the account still goes through.)
     const valueOf = sel => page.$eval(sel, el => el.value).catch(() => '');
+    const rand = (a, b) => a + Math.floor(Math.random() * (b - a));
+    const sleep = ms => page.waitForTimeout(ms);
 
-    const fillField = async (sel, value) => {
+    const humanFill = async (sel, value) => {
       let el;
       try { el = await page.waitForSelector(sel, { timeout: 20000, state: 'visible' }); }
       catch { return false; }
-      for (let attempt = 0; attempt < 5; attempt++) {
+      for (let attempt = 0; attempt < 4; attempt++) {
         try {
-          await el.click({ timeout: 4000 }).catch(() => {});
-          await el.fill(value);              // fill() clears + sets and fires input (React-friendly)
-          await page.waitForTimeout(150);    // let React re-render / commit
-          if ((await valueOf(sel)) === value) return true;
-          // If a React reset wiped it, char-by-char typing survives better:
-          await el.fill('');
-          await el.type(value, { delay: 20 });
-          await page.waitForTimeout(150);
+          await el.scrollIntoViewIfNeeded().catch(() => {});
+          await el.click({ timeout: 4000, delay: rand(40, 120) }).catch(() => {}); // real mouse click
+          // Clear anything there the way a person would.
+          await page.keyboard.press('Control+A').catch(() => {});
+          await page.keyboard.press('Delete').catch(() => {});
+          for (const ch of value) {
+            await page.keyboard.type(ch, { delay: rand(55, 165) }); // human-ish cadence
+            if (Math.random() < 0.08) await sleep(rand(140, 340));  // occasional think-pause
+          }
+          await sleep(rand(120, 260));
           if ((await valueOf(sel)) === value) return true;
         } catch { /* field detached mid-render; retry */ }
-        await page.waitForTimeout(250);
+        await sleep(rand(150, 350));
       }
+      // Last resort so the login still proceeds (may draw a captcha).
+      try {
+        const el2 = await page.$(sel);
+        if (el2) { await el2.fill(value); if ((await valueOf(sel)) === value) return true; }
+      } catch { /* give up; user can finish by hand */ }
       return false;
     };
 
-    await fillField('#login-username', username);
+    // A little mouse wander first — movement entropy a real user generates.
+    try {
+      await page.mouse.move(rand(60, 300), rand(80, 240));
+      await sleep(rand(80, 200));
+      await page.mouse.move(rand(220, 520), rand(200, 400));
+    } catch { /* headful mouse not ready; not fatal */ }
+
+    await humanFill('#login-username', username);
     if (password) {
-      await fillField('#login-password', password);
-      // Only submit once both fields actually hold their values; refill if React
-      // cleared one between filling and clicking.
+      await sleep(rand(250, 550)); // beat between fields, like tabbing/clicking down
+      await humanFill('#login-password', password);
+      // Submit only once both fields hold their values; pause first like a person.
       for (let i = 0; i < 4; i++) {
         const u = await valueOf('#login-username');
         const p = await valueOf('#login-password');
         if (u === username && p === password) {
-          await page.click('#login-button', { timeout: 5000 }).catch(() => {});
+          await sleep(rand(450, 950));
+          await page.click('#login-button', { timeout: 5000, delay: rand(40, 120) }).catch(() => {});
           break;
         }
-        if (u !== username) await fillField('#login-username', username);
-        if (p !== password) await fillField('#login-password', password);
+        if (u !== username) await humanFill('#login-username', username);
+        if (p !== password) await humanFill('#login-password', password);
       }
     }
   }

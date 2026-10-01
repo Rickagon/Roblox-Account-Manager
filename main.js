@@ -614,6 +614,9 @@ function registerIpc() {
     if (creds.length > 1) log(`Opening ${Math.min(slots.length, creds.length)} login windows at a time. Do the "hold" check in each one.`);
 
     const worker = async slot => {
+      // Desync the windows so several automated logins don't hit Roblox from one
+      // IP at the exact same instant (a bot signal that can draw captchas).
+      if (creds.length > 1) await new Promise(r => setTimeout(r, Math.floor(Math.random() * 1800)));
       while (next < creds.length) {
         const line = creds[next++];
         const idx = line.indexOf(':');
