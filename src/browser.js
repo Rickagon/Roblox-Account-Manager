@@ -56,14 +56,18 @@ function launch(profileDir, win = {}) {
 
   fs.mkdirSync(profileDir, { recursive: true });
   disablePasswordPrompts(profileDir);
-  const args = [`--window-size=${win.w || 900},${win.h || 760}`, '--no-first-run', '--no-default-browser-check', '--disable-save-password-bubble', '--test-type', '--disable-session-crashed-bubble', '--hide-crash-restore-bubble'];
+  // Note: no --test-type. It silences the "unsupported flag" bar but is itself a
+  // strong automation fingerprint (Arkose/FunCaptcha reads it), which was helping
+  // trigger captchas on auto-login. We suppress that bar via other means instead.
+  const args = [`--window-size=${win.w || 900},${win.h || 760}`, '--no-first-run', '--no-default-browser-check', '--disable-save-password-bubble', '--disable-session-crashed-bubble', '--hide-crash-restore-bubble', '--disable-blink-features=AutomationControlled'];
   if (win.x != null && win.y != null) args.push(`--window-position=${win.x},${win.y}`);
   const opts = {
     headless: false,
     viewport: null,
     args,
-    // Drop --enable-automation (the "controlled by automated software" banner)
-    // and --no-sandbox (the yellow "unsupported command-line flag" warning).
+    // Drop the flags that mark the browser as automated: --enable-automation (the
+    // "controlled by automated software" banner + navigator.webdriver) and the
+    // --no-sandbox warning bar.
     ignoreDefaultArgs: ['--enable-automation', '--no-sandbox'],
   };
   const p = (async () => {
@@ -146,7 +150,10 @@ async function login(profilesRoot, { username = '', password = '', window: win }
     const rand = (a, b) => a + Math.floor(Math.random() * (b - a));
     const sleep = ms => page.waitForTimeout(ms);
 
-    const humanFill = async (sel, value) => {
+    // Paste the value in one shot (like Ctrl+V) instead of typing it. We focus
+    // with a real mouse click, clear, then insertText — a single input event,
+    // no per-key events.
+    const pasteFill = async (sel, value) => {
       let el;
       try { el = await page.waitForSelector(sel, { timeout: 20000, state: 'visible' }); }
       catch { return false; }
@@ -154,19 +161,15 @@ async function login(profilesRoot, { username = '', password = '', window: win }
         try {
           await el.scrollIntoViewIfNeeded().catch(() => {});
           await el.click({ timeout: 4000, delay: rand(40, 120) }).catch(() => {}); // real mouse click
-          // Clear anything there the way a person would.
           await page.keyboard.press('Control+A').catch(() => {});
           await page.keyboard.press('Delete').catch(() => {});
-          for (const ch of value) {
-            await page.keyboard.type(ch, { delay: rand(55, 165) }); // human-ish cadence
-            if (Math.random() < 0.08) await sleep(rand(140, 340));  // occasional think-pause
-          }
-          await sleep(rand(120, 260));
+          await page.keyboard.insertText(value); // paste-style: one input event
+          await sleep(rand(120, 240));
           if ((await valueOf(sel)) === value) return true;
         } catch { /* field detached mid-render; retry */ }
-        await sleep(rand(150, 350));
+        await sleep(rand(150, 320));
       }
-      // Last resort so the login still proceeds (may draw a captcha).
+      // Last resort so the login still proceeds.
       try {
         const el2 = await page.$(sel);
         if (el2) { await el2.fill(value); if ((await valueOf(sel)) === value) return true; }
@@ -174,17 +177,21 @@ async function login(profilesRoot, { username = '', password = '', window: win }
       return false;
     };
 
+    // Let Arkose/FunCaptcha's session telemetry initialise on a quiet page before
+    // we interact — touching the form the instant it loads looks scripted.
+    await sleep(rand(1500, 3000));
+
     // A little mouse wander first — movement entropy a real user generates.
     try {
       await page.mouse.move(rand(60, 300), rand(80, 240));
-      await sleep(rand(80, 200));
+      await sleep(rand(120, 300));
       await page.mouse.move(rand(220, 520), rand(200, 400));
     } catch { /* headful mouse not ready; not fatal */ }
 
-    await humanFill('#login-username', username);
+    await pasteFill('#login-username', username);
     if (password) {
-      await sleep(rand(250, 550)); // beat between fields, like tabbing/clicking down
-      await humanFill('#login-password', password);
+      await sleep(rand(300, 650)); // beat between fields
+      await pasteFill('#login-password', password);
       // Submit only once both fields hold their values; pause first like a person.
       for (let i = 0; i < 4; i++) {
         const u = await valueOf('#login-username');
@@ -194,8 +201,8 @@ async function login(profilesRoot, { username = '', password = '', window: win }
           await page.click('#login-button', { timeout: 5000, delay: rand(40, 120) }).catch(() => {});
           break;
         }
-        if (u !== username) await humanFill('#login-username', username);
-        if (p !== password) await humanFill('#login-password', password);
+        if (u !== username) await pasteFill('#login-username', username);
+        if (p !== password) await pasteFill('#login-password', password);
       }
     }
   }
