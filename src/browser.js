@@ -56,10 +56,9 @@ function launch(profileDir, win = {}) {
 
   fs.mkdirSync(profileDir, { recursive: true });
   disablePasswordPrompts(profileDir);
-  // Note: no --test-type. It silences the "unsupported flag" bar but is itself a
-  // strong automation fingerprint (Arkose/FunCaptcha reads it), which was helping
-  // trigger captchas on auto-login. We suppress that bar via other means instead.
-  const args = [`--window-size=${win.w || 900},${win.h || 760}`, '--no-first-run', '--no-default-browser-check', '--disable-save-password-bubble', '--disable-session-crashed-bubble', '--hide-crash-restore-bubble', '--disable-blink-features=AutomationControlled'];
+  // --test-type silences the "unsupported command-line flag" bar. (Dropping it
+  // didn't change the captcha, so it's back for the cleaner window.)
+  const args = [`--window-size=${win.w || 900},${win.h || 760}`, '--no-first-run', '--no-default-browser-check', '--disable-save-password-bubble', '--test-type', '--disable-session-crashed-bubble', '--hide-crash-restore-bubble', '--disable-blink-features=AutomationControlled'];
   if (win.x != null && win.y != null) args.push(`--window-position=${win.x},${win.y}`);
   const opts = {
     headless: false,
