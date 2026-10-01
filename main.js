@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, clipboard, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, clipboard, shell, Tray, Menu } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const { Vault } = require('./src/vault');
@@ -44,15 +44,21 @@ const DEFAULT_SETTINGS = {
   agingAlert: true,
   maxActiveClients: 20,
   runOnStartup: false,
+  startMinimized: false,
   autoKeepAlive: true,
   autoKeepAliveDays: 14,
   lastActiveAt: null,
 };
 
 const KEEPALIVE_MODE = process.argv.includes('--keepalive');
+// Launched hidden at Windows startup (see syncLoginItem): grab the Multi-Roblox
+// lock silently in the background without popping a window in the user's face.
+const STARTED_HIDDEN = process.argv.includes('--hidden');
 const TASK_NAME = 'RobloxAccountManagerV2 KeepAlive';
 
 let win;
+let tray = null;
+let isQuitting = false;
 let vault;
 let settings = { ...DEFAULT_SETTINGS };
 let recentGames = [];
@@ -209,11 +215,11 @@ Register-ScheduledTask -TaskName '${TASK_NAME}' -Action $a -Trigger $t -Settings
 
 function syncLoginItem() {
   try {
-    app.setLoginItemSettings(
-      app.isPackaged
-        ? { openAtLogin: !!settings.runOnStartup }
-        : { openAtLogin: !!settings.runOnStartup, path: process.execPath, args: [app.getAppPath()] },
-    );
+    // Start hidden at login so the app can grab the Multi-Roblox lock in the
+    // background before any Roblox opens, without flashing a window.
+    const args = app.isPackaged ? [] : [app.getAppPath()];
+    if (settings.startMinimized) args.push('--hidden');
+    app.setLoginItemSettings({ openAtLogin: !!settings.runOnStartup, path: process.execPath, args });
   } catch (e) {
     log(`Could not change the startup setting: ${e.message}`, 'error');
   }
@@ -438,11 +444,13 @@ function startWindowLabeler() {
 }
 
 async function ensureMultiRoblox() {
-  if (!settings.multiRoblox || launcher.isMultiRobloxEnabled()) { send('multiRoblox', launcher.isMultiRobloxEnabled()); return; }
+  // The pill reflects whether the app actually OWNS the lock (multi will work),
+  // not merely that it holds a handle.
+  if (!settings.multiRoblox || launcher.isMultiRobloxEnabled()) { send('multiRoblox', launcher.isMultiRobloxOwned()); return; }
   const r = await launcher.enableMultiRoblox();
   if (!r.enabled) log('Multi-Roblox could not start. Close the old Roblox Account Manager if it is running, then reopen this app.', 'error');
-  else if (!r.owned) log('Multi-Roblox: a Roblox client is already running, so the app could not take the lock first. Close ALL Roblox windows, then it will grab it — after that you can launch multiple.', 'error');
-  send('multiRoblox', launcher.isMultiRobloxEnabled());
+  else if (!r.owned) log('Multi-Roblox: a Roblox client is already running, so the app could not take the lock first. Close ALL Roblox windows (or Quit this app from the tray and reopen it) — then it will grab the lock and you can launch multiple.', 'error');
+  send('multiRoblox', launcher.isMultiRobloxOwned());
 }
 
 // If no Roblox is running, (re)grab the lock so the app OWNS it before launches.
@@ -475,7 +483,7 @@ function registerIpc() {
       accounts: vault.accounts.map(publicAccount),
       settings,
       recent: recentGames,
-      multiRoblox: launcher.isMultiRobloxEnabled(),
+      multiRoblox: launcher.isMultiRobloxOwned(),
       defaultRamFile: fs.existsSync(path.join(DEFAULT_RAM_DIR, 'AccountData.json')) ? path.join(DEFAULT_RAM_DIR, 'AccountData.json') : '',
       version: app.getVersion(),
     };
@@ -486,7 +494,7 @@ function registerIpc() {
     saveSettings();
     if ('presenceIntervalSec' in patch || 'showPresence' in patch || 'killClosedClients' in patch) restartTimers();
     if ('autoKeepAlive' in patch) syncScheduledTask();
-    if ('runOnStartup' in patch) syncLoginItem();
+    if ('runOnStartup' in patch || 'startMinimized' in patch) syncLoginItem();
     if ('multiRoblox' in patch) {
       if (patch.multiRoblox) ensureMultiRoblox();
       else { launcher.disableMultiRoblox(); send('multiRoblox', false); }
@@ -765,6 +773,18 @@ function registerIpc() {
     try {
       await grabLockIfClear(); // own the lock first if nothing is running yet
       await ensureMultiRoblox();
+
+      // Don't cancel a Roblox that's already running. If the app doesn't hold the
+      // single-instance lock (a client started before the app grabbed it), a new
+      // launch would hand off to that running client and close it. Refuse instead.
+      if (!launcher.isMultiRobloxOwned()) {
+        const running = await launcher.countRobloxClients().catch(() => 0);
+        if (running > 0) {
+          log('Not launching — a Roblox client is already running and the app doesn\'t hold the Multi-Roblox lock, so launching now would close your current game. Fully close Roblox (or Quit this app from the tray and reopen it) first, then Join again.', 'error');
+          return;
+        }
+      }
+
       const accounts = ids.map(id => vault.get(id)).filter(Boolean);
       const max = Math.max(1, settings.maxActiveClients || 20);
       for (let i = 0; i < accounts.length; i++) {
@@ -862,7 +882,20 @@ function registerIpc() {
   handle('roblox:closeAll', async () => {
     joinCancel = true; // stop any launch queue in progress
     const out = await launcher.countRobloxClients().catch(() => 0);
-    require('child_process').exec('taskkill /IM RobloxPlayerBeta.exe /F');
+    await new Promise(res => require('child_process').exec('taskkill /IM RobloxPlayerBeta.exe /F', () => res()));
+
+    // Nothing is running now, so re-grab the single-instance lock: this is the
+    // one-click way to fix Multi-Roblox when a client had taken the lock first.
+    if (settings.multiRoblox) {
+      launcher.disableMultiRoblox();
+      // Wait for the clients to actually exit before claiming the lock.
+      for (let i = 0; i < 12; i++) {
+        if ((await launcher.listRobloxProcesses().catch(() => [{}])).length === 0) break;
+        await new Promise(r => setTimeout(r, 250));
+      }
+      await ensureMultiRoblox();
+      if (launcher.isMultiRobloxOwned()) log('Multi-Roblox lock re-claimed — you can launch multiple clients now.');
+    }
     return out;
   });
 }
@@ -877,6 +910,7 @@ function createWindow() {
     height: 480,
     minWidth: 820,
     minHeight: 420,
+    show: !STARTED_HIDDEN, // launched at startup with --hidden: stay in the tray
     backgroundColor: '#0f1115',
     title: 'Roblox Account Manager',
     icon: path.join(__dirname, 'assets', process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
@@ -890,6 +924,39 @@ function createWindow() {
   });
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   if (process.platform === 'win32') win.setIcon(path.join(__dirname, 'assets', 'icon.ico'));
+
+  // Closing the window hides it to the tray instead of quitting, so the app
+  // keeps holding the Multi-Roblox lock for the whole session. Real exit is
+  // via the tray's Quit (or before-quit), which sets isQuitting first.
+  win.on('close', e => {
+    if (!isQuitting) { e.preventDefault(); win.hide(); }
+  });
+}
+
+// Bring the window back from the tray (recreating it if it was destroyed).
+function showWindow() {
+  if (!win || win.isDestroyed()) { createWindow(); return; }
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+}
+
+// Tray icon: the app lives here while the window is closed, so it can hold the
+// Multi-Roblox lock in the background.
+function buildTray() {
+  if (tray) return;
+  try {
+    tray = new Tray(path.join(__dirname, 'assets', 'icon.ico'));
+  } catch { return; } // no tray (e.g. missing icon) -> app still runs
+  tray.setToolTip('Roblox Account Manager');
+  const menu = Menu.buildFromTemplate([
+    { label: 'Open Roblox Account Manager', click: showWindow },
+    { type: 'separator' },
+    { label: 'Quit (releases Multi-Roblox lock)', click: () => { isQuitting = true; app.quit(); } },
+  ]);
+  tray.setContextMenu(menu);
+  tray.on('click', showWindow);
+  tray.on('double-click', showWindow);
 }
 
 const gotLock = app.requestSingleInstanceLock();
@@ -922,6 +989,7 @@ if (!gotLock) {
     syncLoginItem();
     registerIpc();
     createWindow();
+    buildTray();
     restartTimers();
 
     if (settings.multiRoblox) ensureMultiRoblox();
@@ -933,10 +1001,13 @@ if (!gotLock) {
   });
 
   app.on('before-quit', async () => {
+    isQuitting = true; // let the window's close handler destroy it instead of hiding
     launcher.disableMultiRoblox();
     if (vault) vault.flush(); // only writes if there were unsaved changes -> avoids racing a reopen's read
     await browser.closeAll();
   });
 
-  app.on('window-all-closed', () => app.quit());
+  // The window normally hides to the tray (not destroyed), so this only fires on
+  // a real quit. Stay alive in the tray otherwise so the lock keeps being held.
+  app.on('window-all-closed', () => { if (isQuitting) app.quit(); });
 }

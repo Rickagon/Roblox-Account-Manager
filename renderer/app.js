@@ -767,6 +767,7 @@ function bind() {
     $('#s-showPresence').checked = s.showPresence;
     $('#s-agingAlert').checked = s.agingAlert !== false;
     $('#s-runOnStartup').checked = s.runOnStartup;
+    $('#s-startMinimized').checked = s.startMinimized;
     $('#s-maxActiveClients').value = s.maxActiveClients;
     $('#s-joinDelaySec').value = s.joinDelaySec;
     $('#s-presenceIntervalSec').value = s.presenceIntervalSec;
@@ -784,6 +785,7 @@ function bind() {
       showPresence: $('#s-showPresence').checked,
       agingAlert: $('#s-agingAlert').checked,
       runOnStartup: $('#s-runOnStartup').checked,
+      startMinimized: $('#s-startMinimized').checked,
       maxActiveClients: Math.max(1, Number($('#s-maxActiveClients').value) || 20),
       joinDelaySec: Number($('#s-joinDelaySec').value) || 0,
       presenceIntervalSec: Number($('#s-presenceIntervalSec').value) || 5,

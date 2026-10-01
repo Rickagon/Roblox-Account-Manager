@@ -134,26 +134,51 @@ async function login(profilesRoot, { username = '', password = '', window: win }
   await applyCss();
 
   if (username) {
-    // Robustly fill: wait for each field, set it, and verify it stuck (retry once).
+    // Roblox's login form is a React app that re-renders a moment after it first
+    // appears, which can wipe text typed too early — that's why the username
+    // sometimes came up blank. So: wait for each field to be editable, set it,
+    // let React commit, and verify it stuck (retrying); then re-check BOTH fields
+    // right before submitting and refill whatever got cleared, so it never
+    // clicks Log In with an empty box.
+    const valueOf = sel => page.$eval(sel, el => el.value).catch(() => '');
+
     const fillField = async (sel, value) => {
-      try {
-        const el = await page.waitForSelector(sel, { timeout: 15000, state: 'visible' });
-        for (let attempt = 0; attempt < 2; attempt++) {
-          await el.click({ timeout: 5000 }).catch(() => {});
+      let el;
+      try { el = await page.waitForSelector(sel, { timeout: 20000, state: 'visible' }); }
+      catch { return false; }
+      for (let attempt = 0; attempt < 5; attempt++) {
+        try {
+          await el.click({ timeout: 4000 }).catch(() => {});
+          await el.fill(value);              // fill() clears + sets and fires input (React-friendly)
+          await page.waitForTimeout(150);    // let React re-render / commit
+          if ((await valueOf(sel)) === value) return true;
+          // If a React reset wiped it, char-by-char typing survives better:
           await el.fill('');
-          await el.type(value, { delay: 15 });
-          if (await el.inputValue().catch(() => '') === value) return true;
-        }
-      } catch { /* field never appeared */ }
+          await el.type(value, { delay: 20 });
+          await page.waitForTimeout(150);
+          if ((await valueOf(sel)) === value) return true;
+        } catch { /* field detached mid-render; retry */ }
+        await page.waitForTimeout(250);
+      }
       return false;
     };
-    try {
-      await fillField('#login-username', username);
-      if (password) {
-        const ok = await fillField('#login-password', password);
-        if (ok) await page.click('#login-button', { timeout: 5000 }).catch(() => {});
+
+    await fillField('#login-username', username);
+    if (password) {
+      await fillField('#login-password', password);
+      // Only submit once both fields actually hold their values; refill if React
+      // cleared one between filling and clicking.
+      for (let i = 0; i < 4; i++) {
+        const u = await valueOf('#login-username');
+        const p = await valueOf('#login-password');
+        if (u === username && p === password) {
+          await page.click('#login-button', { timeout: 5000 }).catch(() => {});
+          break;
+        }
+        if (u !== username) await fillField('#login-username', username);
+        if (p !== password) await fillField('#login-password', password);
       }
-    } catch { /* user can finish by hand */ }
+    }
   }
 
   return new Promise(resolve => {

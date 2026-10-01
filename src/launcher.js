@@ -254,6 +254,7 @@ $lines -join "\`n"`);
 
 let mutexHolder = null;
 let mutexStopping = false;
+let mutexOwned = false; // true only if WE created the lock (grabbed it before any Roblox)
 
 // A background PowerShell process holds Roblox's single-instance handles for the
 // whole session. It keeps a handle whether or not it created them, so even if a
@@ -277,28 +278,30 @@ try { $m.ReleaseMutex() } catch { }
 }
 
 function enableMultiRoblox() {
-  if (mutexHolder) return Promise.resolve({ enabled: true, owned: true });
+  if (mutexHolder) return Promise.resolve({ enabled: true, owned: mutexOwned });
   mutexStopping = false;
   const child = spawnHolder();
   mutexHolder = child;
   child.on('exit', () => {
     if (mutexHolder !== child) return;
     mutexHolder = null;
+    mutexOwned = false;
     // Persistent: if it dies unexpectedly, grab the lock again.
     if (!mutexStopping) setTimeout(() => { if (!mutexHolder && !mutexStopping) enableMultiRoblox(); }, 1000);
   });
   return new Promise(resolve => {
     let done = false;
     const finish = r => { if (!done) { done = true; resolve(r); } };
-    child.stdout.once('data', buf => finish({ enabled: true, owned: buf.toString().includes('OWNED') }));
+    child.stdout.once('data', buf => { mutexOwned = buf.toString().includes('OWNED'); finish({ enabled: true, owned: mutexOwned }); });
     child.on('exit', () => finish({ enabled: false, owned: false }));
-    setTimeout(() => finish({ enabled: !!mutexHolder, owned: false }), 4000);
+    setTimeout(() => finish({ enabled: !!mutexHolder, owned: mutexOwned }), 4000);
   });
 }
 
 function disableMultiRoblox() {
   if (!mutexHolder) return;
   mutexStopping = true;
+  mutexOwned = false;
   const child = mutexHolder;
   mutexHolder = null;
   try { child.stdin.end('\n'); } catch { /* ignore */ }
@@ -307,6 +310,13 @@ function disableMultiRoblox() {
 
 function isMultiRobloxEnabled() {
   return !!mutexHolder;
+}
+
+// True only when the app grabbed the single-instance lock BEFORE any Roblox
+// started. When false, launching a new client while one is running would cancel
+// the running one, so joins must be blocked.
+function isMultiRobloxOwned() {
+  return mutexOwned;
 }
 
 module.exports = {
@@ -323,4 +333,5 @@ module.exports = {
   enableMultiRoblox,
   disableMultiRoblox,
   isMultiRobloxEnabled,
+  isMultiRobloxOwned,
 };
