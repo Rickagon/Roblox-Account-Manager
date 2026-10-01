@@ -33,7 +33,7 @@ contextBridge.exposeInMainWorld('ram', {
   closeAllRoblox: () => call('roblox:closeAll'),
 
   pickRamFile: () => call('import:pick'),
-  importRam: file => call('import:ram', file),
+  importRam: (file, password) => call('import:ram', file, password),
   openExternal: url => call('open:external', url),
   openRepo: () => call('open:repo'),
 

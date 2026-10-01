@@ -1,14 +1,57 @@
 // Imports accounts from ic3w0lf's Roblox Account Manager (AccountData.json).
 // RAM protects the file with Windows DPAPI (CurrentUser) plus a fixed entropy
 // string, so it can be read without a password by the same Windows user.
+//
+// If the user set a RAM password, RAM instead encrypts the file with libsodium
+// (see RAM's Cryptography.cs): the layout is
+//   [RAMHeader 64 bytes][Salt 16][Nonce 24][SecretBox ciphertext]
+// where the key = crypto_pwhash(Argon2i, Moderate = ops 6 / mem 128MiB, 32 bytes)
+// over SHA-512(password), and the body is crypto_secretbox (XSalsa20-Poly1305).
+// We reproduce that exactly to import password-locked files.
 
 const fs = require('fs');
+const crypto = require('crypto');
 const { execFile } = require('child_process');
+const sodium = require('libsodium-wrappers-sumo');
 
 // "ROBLOX ACCOUNT MANAGER | :) | BROUGHT TO YOU BUY ic3w0lf" — from RAM's AccountManager.cs
 const RAM_ENTROPY = Buffer.from('ROBLOX ACCOUNT MANAGER | :) | BROUGHT TO YOU BUY ic3w0lf', 'ascii');
-// Files encrypted with a RAM password start with this header instead of a DPAPI blob.
-const RAM_PASSWORD_HEADER = Buffer.from('Roblox Account', 'ascii');
+// The exact RAMHeader byte array from RAM's Cryptography.cs — a password-locked
+// file begins with these 64 bytes ("Roblox Account Manager created by ic3w0lf22 @ github.com .......").
+const RAM_FULL_HEADER = Buffer.from([
+  82, 111, 98, 108, 111, 120, 32, 65, 99, 99, 111, 117, 110, 116, 32, 77, 97, 110, 97, 103, 101, 114, 32,
+  99, 114, 101, 97, 116, 101, 100, 32, 98, 121, 32, 105, 99, 51, 119, 48, 108, 102, 50, 50, 32, 64, 32,
+  103, 105, 116, 104, 117, 98, 46, 99, 111, 109, 32, 46, 46, 46, 46, 46, 46, 46,
+]);
+
+// Decrypt a password-locked RAM file. Throws 'RAM_PASSWORD_WRONG' if the password
+// (or anything else) doesn't authenticate.
+async function sodiumDecrypt(raw, password) {
+  await sodium.ready;
+  const h = RAM_FULL_HEADER.length; // 64
+  const salt = raw.subarray(h, h + 16);
+  const nonce = raw.subarray(h + 16, h + 40);
+  const cipher = raw.subarray(h + 40);
+  // RAM hashes the password with crypto_hash (SHA-512) before Argon2 (AccountManager.cs).
+  const pwInput = crypto.createHash('sha512').update(String(password), 'utf8').digest();
+  let key;
+  try {
+    key = sodium.crypto_pwhash(
+      32, new Uint8Array(pwInput), new Uint8Array(salt),
+      6, 134217728, sodium.crypto_pwhash_ALG_ARGON2I13, // Moderate: ops 6, mem 128 MiB, Argon2i
+    );
+  } catch (e) {
+    throw new Error(`Could not derive the key from the RAM password: ${e.message}`);
+  }
+  let plain;
+  try {
+    plain = sodium.crypto_secretbox_open_easy(new Uint8Array(cipher), new Uint8Array(nonce), key);
+  } catch {
+    throw new Error('RAM_PASSWORD_WRONG');
+  }
+  if (!plain) throw new Error('RAM_PASSWORD_WRONG');
+  return Buffer.from(plain).toString('utf8');
+}
 
 function dpapiUnprotect(filePath) {
   const script = `
@@ -38,18 +81,25 @@ catch { $p = [Security.Cryptography.ProtectedData]::Unprotect($b, $e, 'LocalMach
   });
 }
 
-/** Reads a RAM AccountData.json and returns account objects in this app's shape. */
-async function readRamFile(filePath) {
+/**
+ * Reads a RAM AccountData.json and returns account objects in this app's shape.
+ * If the file is password-locked, pass the RAM password; without it, throws
+ * 'RAM_PASSWORD_REQUIRED' so the caller can prompt.
+ */
+async function readRamFile(filePath, password = '') {
   const raw = fs.readFileSync(filePath);
   let json;
 
-  if (raw.subarray(0, RAM_PASSWORD_HEADER.length).equals(RAM_PASSWORD_HEADER)) {
-    throw new Error('This RAM file is locked with a RAM password. Open RAM, remove the password in its settings, then import again.');
+  const isPasswordFile = raw.length >= RAM_FULL_HEADER.length
+    && raw.subarray(0, RAM_FULL_HEADER.length).equals(RAM_FULL_HEADER);
+  if (isPasswordFile) {
+    if (!password) throw new Error('RAM_PASSWORD_REQUIRED');
+    json = await sodiumDecrypt(raw, password);
+  } else {
+    const text = raw.toString('utf8').trimStart().replace(/^﻿/, '');
+    if (text.startsWith('[')) json = text; // RAM with encryption turned off
+    else json = await dpapiUnprotect(filePath);
   }
-
-  const text = raw.toString('utf8').trimStart().replace(/^﻿/, '');
-  if (text.startsWith('[')) json = text; // RAM with encryption turned off
-  else json = await dpapiUnprotect(filePath);
 
   const list = JSON.parse(json);
   if (!Array.isArray(list)) throw new Error('Unexpected RAM file format');

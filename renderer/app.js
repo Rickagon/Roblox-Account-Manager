@@ -588,8 +588,25 @@ async function addAccount(kind) {
   } else if (kind === 'ram') {
     const file = await api(window.ram.pickRamFile());
     if (!file) return;
-    const r = await api(window.ram.importRam(file));
-    log(`Imported ${r.added} new, updated ${r.updated}`);
+    let password = '';
+    for (;;) {
+      try {
+        const r = await api(window.ram.importRam(file, password));
+        log(`Imported ${r.added} new, updated ${r.updated}`);
+        return;
+      } catch (e) {
+        // The file is locked with a RAM password — ask for it and retry.
+        if (e.message === 'RAM_PASSWORD_REQUIRED' || e.message === 'RAM_PASSWORD_WRONG') {
+          const title = e.message === 'RAM_PASSWORD_WRONG'
+            ? 'Wrong RAM password — try again'
+            : 'This RAM file is password-protected. Enter the RAM password:';
+          password = await prompt(title, '', 'password');
+          if (password == null) { log('RAM import cancelled'); return; } // user closed the dialog
+          continue;
+        }
+        throw e; // other errors bubble up to run()'s logger
+      }
+    }
   }
 }
 

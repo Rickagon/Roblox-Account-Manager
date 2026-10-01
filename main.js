@@ -841,8 +841,8 @@ function registerIpc() {
     return r.canceled ? '' : r.filePaths[0];
   });
 
-  handle('import:ram', async file => {
-    const list = await readRamFile(file);
+  handle('import:ram', async (file, password) => {
+    const list = await readRamFile(file, password || '');
     let added = 0;
     let updated = 0;
     for (const a of list) {
