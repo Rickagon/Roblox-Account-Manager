@@ -374,10 +374,16 @@ async function addRecentGame(placeId) {
 async function joinWith(acc, opts) {
   const client = clientFor(acc);
 
-  if (settings.closeLastOnLaunch) {
-    const n = await launcher.closeClientsFor(acc.browserTrackerId).catch(() => 0);
-    if (n) log(`${acc.username}: closed previous client`);
-  }
+  // These don't depend on the launch target, so start them now and let them run
+  // while we resolve the target below (overlaps a PowerShell call + a network
+  // round-trip instead of paying for them one after another):
+  //  - close this account's previous client (PowerShell)
+  //  - fetch the one-time auth ticket (network)
+  const closeP = settings.closeLastOnLaunch
+    ? launcher.closeClientsFor(acc.browserTrackerId).catch(() => 0)
+    : Promise.resolve(0);
+  const ticketP = client.getAuthTicket();
+  ticketP.catch(() => {}); // avoid an unhandled rejection while it runs ahead; re-thrown at the await
 
   const launch = { browserTrackerId: acc.browserTrackerId };
 
@@ -407,7 +413,11 @@ async function joinWith(acc, opts) {
     }
   }
 
-  launch.ticket = await client.getAuthTicket();
+  // Make sure the old client is gone before launching the new one.
+  const closed = await closeP;
+  if (closed) log(`${acc.username}: closed previous client`);
+
+  launch.ticket = await ticketP; // re-throws here if the ticket fetch failed
   await launcher.launchUri(launcher.buildLaunchUri(launch));
   vault.update(acc.id, { lastUse: new Date().toISOString() });
   log(`${acc.username}: launching`);
@@ -456,6 +466,7 @@ async function ensureMultiRoblox() {
 // If no Roblox is running, (re)grab the lock so the app OWNS it before launches.
 async function grabLockIfClear() {
   if (!settings.multiRoblox) return;
+  if (launcher.isMultiRobloxOwned()) return; // already own it — skip the process scan + respawn
   const procs = await launcher.listRobloxProcesses().catch(() => [{}]);
   if (procs.length === 0) {
     launcher.disableMultiRoblox();
