@@ -31,6 +31,7 @@ contextBridge.exposeInMainWorld('ram', {
   servers: (placeId, cursor) => call('servers', { placeId, cursor }),
   removeRecent: placeId => call('recent:remove', placeId),
   closeAllRoblox: () => call('roblox:closeAll'),
+  arrangeWindows: () => call('roblox:arrange'),
 
   checkUpdate: () => call('update:check'),
   applyUpdate: () => call('update:apply'),

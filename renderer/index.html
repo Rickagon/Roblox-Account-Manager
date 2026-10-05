@@ -77,6 +77,7 @@
       <div class="side-top">
         <span id="multi-status" class="pill" title="Multi-Roblox lets several Roblox clients run at once">Multi-Roblox: off</span>
         <span class="grow"></span>
+        <button id="btn-arrange" class="small" title="Tile all open Roblox windows into a grid">Arrange</button>
         <button id="btn-close-roblox" class="small" title="Stop the launch queue and close every Roblox client">Stop &amp; Close All</button>
         <button id="btn-settings" class="small">Settings</button>
       </div>
@@ -111,6 +112,10 @@
           <input id="f-group" class="grow" list="group-list" placeholder="Group">
           <datalist id="group-list"></datalist>
           <button id="btn-set-group">Set Group</button>
+        </div>
+        <div class="row tight">
+          <input id="f-proxy" class="grow" placeholder="Proxy host:port[:user:pass]" title="Routes this account's browser (login / cookie refresh) through a proxy. Leave blank for none.">
+          <button id="btn-set-proxy">Set Proxy</button>
         </div>
         <p id="edit-target" class="muted small-text">Select accounts to edit</p>
       </div>
@@ -147,6 +152,14 @@
       <h3>Settings</h3>
       <button class="icon" data-close>✕</button>
     </div>
+    <label>Theme
+      <select id="s-theme">
+        <option value="dark">Dark (default)</option>
+        <option value="midnight">Midnight</option>
+        <option value="dracula">Dracula</option>
+        <option value="light">Light</option>
+      </select>
+    </label>
     <label class="check"><input type="checkbox" id="s-multiRoblox"> Multi-Roblox (run several clients at once)</label>
     <label class="check"><input type="checkbox" id="s-closeLastOnLaunch"> Close an account's previous client before launching it again</label>
     <label class="check"><input type="checkbox" id="s-killClosedClients"> Force-close Roblox clients that don't exit when you X out</label>

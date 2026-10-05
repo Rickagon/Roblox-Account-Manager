@@ -43,11 +43,26 @@ function disablePasswordPrompts(profileDir) {
   } catch { /* not fatal */ }
 }
 
+// Parse a per-account proxy string into Playwright's { server, username, password }.
+// Accepts "host:port", "host:port:user:pass", "scheme://host:port", or
+// "scheme://user:pass@host:port". Returns null if empty/unparseable.
+function parseProxy(s) {
+  s = String(s || '').trim();
+  if (!s) return null;
+  let m = s.match(/^(\w+):\/\/(?:([^:@]+):([^@]+)@)?([^:/]+):(\d+)$/);
+  if (m) return { server: `${m[1]}://${m[4]}:${m[5]}`, username: m[2] || undefined, password: m[3] || undefined };
+  const p = s.split(':');
+  if (p.length === 2) return { server: `http://${p[0]}:${p[1]}` };
+  if (p.length === 4) return { server: `http://${p[0]}:${p[1]}`, username: p[2], password: p[3] };
+  return null;
+}
+
 /**
  * @param {string} profileDir
  * @param {{x?:number,y?:number,w?:number,h?:number}} [win] optional window placement
+ * @param {string} [proxy] optional per-account proxy (host:port[:user:pass] or URL)
  */
-function launch(profileDir, win = {}) {
+function launch(profileDir, win = {}, proxy = null) {
   // Cache the in-flight promise (not just the resolved context) so two quick
   // calls can't each spawn Chromium against the same profile folder, which is
   // what made browser windows reopen after being closed.
@@ -69,6 +84,8 @@ function launch(profileDir, win = {}) {
     // --no-sandbox warning bar.
     ignoreDefaultArgs: ['--enable-automation', '--no-sandbox'],
   };
+  const pxy = parseProxy(proxy);
+  if (pxy) opts.proxy = pxy; // route this profile's browser traffic through the account's proxy
   const p = (async () => {
     try {
       return await chromium.launchPersistentContext(profileDir, { ...opts, channel: 'chrome' });
@@ -107,9 +124,9 @@ function cookieParam(value) {
  * Opens a login window. Resolves with { cookie, password, user, profileDir }
  * once the user has signed in, or null if they closed the window.
  */
-async function login(profilesRoot, { username = '', password = '', window: win } = {}) {
+async function login(profilesRoot, { username = '', password = '', window: win, proxy = '' } = {}) {
   const profileDir = path.join(profilesRoot, crypto.randomUUID());
-  const ctx = await launch(profileDir, win);
+  const ctx = await launch(profileDir, win, proxy);
   const page = ctx.pages()[0] || (await ctx.newPage());
 
   let capturedPassword = '';
@@ -239,7 +256,7 @@ async function login(profilesRoot, { username = '', password = '', window: win }
  */
 async function openAccount(account, profileDir, onCookie, url = 'https://www.roblox.com/home') {
   const alreadyOpen = open.has(profileDir);
-  const ctx = await launch(profileDir);
+  const ctx = await launch(profileDir, {}, account.proxy);
 
   if (alreadyOpen) {
     // Reuse the window that's already up: just navigate it, don't wire it twice.

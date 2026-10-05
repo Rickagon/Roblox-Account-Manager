@@ -45,6 +45,7 @@ const DEFAULT_SETTINGS = {
   maxActiveClients: 20,
   runOnStartup: false,
   startMinimized: false,
+  theme: 'dark',
   autoKeepAlive: true,
   autoKeepAliveDays: 14,
   lastActiveAt: null,
@@ -613,7 +614,7 @@ function registerIpc() {
   handle('account:relogin', async id => {
     const acc = vault.get(id);
     log(`Log in as ${acc.username} in the window that opened`);
-    const r = await browser.login(PROFILES_DIR, { username: acc.username, password: acc.password });
+    const r = await browser.login(PROFILES_DIR, { username: acc.username, password: acc.password, proxy: acc.proxy });
     if (!r) return null;
     if (r.user.id !== acc.userId) throw new Error(`You logged in as ${r.user.name}, not ${acc.username}. Nothing was changed.`);
     vault.update(id, { cookie: r.cookie, password: r.password || acc.password, profileDir: r.profileDir, valid: true, cookieUpdatedAt: new Date().toISOString(), lastChecked: new Date().toISOString() });
@@ -631,15 +632,17 @@ function registerIpc() {
     }, url);
   });
 
+  handle('roblox:arrange', () => launcher.arrangeWindows());
+
   handle('account:update', (id, patch) => {
-    const allowed = ['alias', 'description', 'group'];
+    const allowed = ['alias', 'description', 'group', 'proxy'];
     const clean = Object.fromEntries(Object.entries(patch).filter(([k]) => allowed.includes(k)));
     vault.update(id, clean);
     pushAccounts();
   });
 
   handle('account:updateMany', (ids, patch) => {
-    const allowed = ['alias', 'description', 'group'];
+    const allowed = ['alias', 'description', 'group', 'proxy'];
     const clean = Object.fromEntries(Object.entries(patch).filter(([k]) => allowed.includes(k)));
     for (const id of ids) vault.update(id, clean);
     pushAccounts();

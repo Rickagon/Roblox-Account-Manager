@@ -16,6 +16,25 @@
   color-scheme: dark;
 }
 
+/* ---- Themes (override the tokens above; set via <html data-theme="…">) ---- */
+:root[data-theme="midnight"] {
+  --bg: #0a0e1a; --panel: #111628; --panel-2: #172038; --border: #26304a;
+  --text: #e8ecf7; --muted: #7e88a8; --accent: #5b8cff; --accent-hover: #4a77e6;
+  color-scheme: dark;
+}
+:root[data-theme="dracula"] {
+  --bg: #282a36; --panel: #2f3240; --panel-2: #373a4a; --border: #44475a;
+  --text: #f8f8f2; --muted: #9aa0b3; --accent: #bd93f9; --accent-hover: #a87fe6;
+  --ok: #50fa7b; --warn: #f1fa8c; --danger: #ff5555; --game: #8be9fd; --studio: #ffb86c;
+  color-scheme: dark;
+}
+:root[data-theme="light"] {
+  --bg: #f4f5f8; --panel: #ffffff; --panel-2: #eef0f4; --border: #d6dae2;
+  --text: #1b1f27; --muted: #5f6775; --accent: #2f6fd8; --accent-hover: #255cb8;
+  --ok: #1a7f4b; --warn: #b7791f; --danger: #c7362f; --game: #2f6fd8; --studio: #c2560f;
+  color-scheme: light;
+}
+
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; }
 body {

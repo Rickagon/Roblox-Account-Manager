@@ -1,5 +1,10 @@
 # Roblox Account Manager (V2)
 
+![platform](https://img.shields.io/badge/platform-Windows-0a7bbb)
+![electron](https://img.shields.io/badge/built%20with-Electron-2b2e3b)
+[![latest release](https://img.shields.io/github/v/release/Rickagon/Roblox-Account-Manager)](https://github.com/Rickagon/Roblox-Account-Manager/releases/latest)
+[![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+
 A modern rebuild of ic3w0lf's Roblox Account Manager, in Electron + Node. Manage
 many Roblox accounts, launch them into games, run several clients at once, and
 keep sessions alive.
@@ -7,6 +12,12 @@ keep sessions alive.
 > This repo contains **only the app code** — no accounts, cookies or passwords.
 > Your accounts are stored, encrypted, in `%USERPROFILE%\.roblox-account-manager-v2`
 > on the machine you run it on, and never in this project.
+
+## Screenshots
+
+<!-- Drop a screenshot at docs/screenshot.png (tip: turn on "Hide Usernames"
+     first so no account names are shown) and it will appear here. -->
+![Roblox Account Manager](docs/screenshot.png)
 
 ## Download & run (no terminal, no Node)
 
@@ -68,3 +79,12 @@ npm run pack       # build the standalone .exe into dist/
 
 The packaged app appears in
 `dist\Roblox Account Manager-win32-x64\Roblox Account Manager.exe`.
+
+## Credits
+
+A modern rebuild inspired by [ic3w0lf22's Roblox Account Manager](https://github.com/ic3w0lf22/Roblox-Account-Manager).
+
+## License
+
+[MIT](LICENSE)
+

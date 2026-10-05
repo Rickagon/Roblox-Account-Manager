@@ -246,6 +246,54 @@ $lines -join "\`n"`);
   }).filter(Boolean);
 }
 
+/** Tile every visible Roblox window into a grid across the primary monitor. */
+async function arrangeWindows() {
+  const out = await ps(`
+$ProgressPreference='SilentlyContinue'
+Add-Type -AssemblyName System.Windows.Forms -ErrorAction SilentlyContinue
+Add-Type @"
+using System;using System.Runtime.InteropServices;
+public class RamArr {
+ [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindowsProc cb, IntPtr l);
+ [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
+ [DllImport("user32.dll")] public static extern int GetWindowThreadProcessId(IntPtr h, out int pid);
+ [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr h, int n);
+ [DllImport("user32.dll")] public static extern bool MoveWindow(IntPtr h, int x, int y, int w, int ht, bool repaint);
+ public delegate bool EnumWindowsProc(IntPtr h, IntPtr l);
+}
+"@ -ErrorAction SilentlyContinue
+
+$wins = New-Object System.Collections.ArrayList
+$cb = [RamArr+EnumWindowsProc]{ param($h,$l)
+  if ([RamArr]::IsWindowVisible($h)) {
+    $procId = 0
+    [RamArr]::GetWindowThreadProcessId($h, [ref]$procId) | Out-Null
+    $p = Get-Process -Id $procId -ErrorAction SilentlyContinue
+    if ($p -and $p.ProcessName -eq 'RobloxPlayerBeta') { [void]$wins.Add([Int64]$h) }
+  }
+  return $true
+}
+[RamArr]::EnumWindows($cb, [IntPtr]::Zero) | Out-Null
+$n = $wins.Count
+if ($n -eq 0) { return 0 }
+$wa = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
+$cols = [int][math]::Ceiling([math]::Sqrt($n))
+$rows = [int][math]::Ceiling($n / $cols)
+$cw = [int][math]::Floor($wa.Width / $cols)
+$ch = [int][math]::Floor($wa.Height / $rows)
+for ($i=0; $i -lt $n; $i++) {
+  $col = $i % $cols
+  $row = [int][math]::Floor($i / $cols)
+  $x = $wa.X + $col * $cw
+  $y = $wa.Y + $row * $ch
+  [RamArr]::ShowWindow([IntPtr][Int64]$wins[$i], 9) | Out-Null
+  [RamArr]::MoveWindow([IntPtr][Int64]$wins[$i], [int]$x, [int]$y, [int]$cw, [int]$ch, $true) | Out-Null
+}
+$n`);
+  const m = String(out).match(/\d+/);
+  return m ? Number(m[0]) : 0;
+}
+
 // ---- Multi-Roblox ----
 // Roblox refuses to start a second client while "ROBLOX_singletonMutex" is
 // held by another Roblox. Grabbing it ourselves first makes every client
@@ -329,6 +377,7 @@ module.exports = {
   listRobloxWindows,
   applyWindowTitles,
   getWindowAccounts,
+  arrangeWindows,
   enableMultiRoblox,
   disableMultiRoblox,
   isMultiRobloxEnabled,

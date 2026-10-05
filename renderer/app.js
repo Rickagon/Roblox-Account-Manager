@@ -14,6 +14,8 @@ const state = {
   sort: JSON.parse(safeGet('sort') || 'null'),
 };
 
+function applyTheme(name) { document.documentElement.setAttribute('data-theme', name || 'dark'); }
+
 function safeGet(k) { try { return localStorage.getItem(k); } catch { return null; } }
 function safeSet(k, v) { try { localStorage.setItem(k, v); } catch { /* ignore */ } }
 
@@ -415,6 +417,7 @@ function renderEditor() {
     const one = accs.length === 1 ? accs[0] : null;
     $('#f-alias').value = one?.alias || '';
     $('#f-group').value = one ? (one.group || 'Default') : '';
+    $('#f-proxy').value = one?.proxy || '';
   }
   $('#edit-target').textContent = !accs.length ? 'Select accounts to edit'
     : accs.length === 1 ? `Editing ${accs[0].username}` : `Editing ${accs.length} accounts`;
@@ -715,6 +718,7 @@ function bind() {
   $('#btn-remove').onclick = run(() => { if (needSelection()) return removeSelected(); });
   $('#hide-usernames').onchange = e => { document.body.classList.toggle('hide-names', e.target.checked); safeSet('hideUsernames', e.target.checked ? '1' : ''); };
   $('#btn-close-roblox').onclick = run(async () => { const n = await api(window.ram.closeAllRoblox()); log(`Stopped the queue and closed ${n} Roblox client(s)`); });
+  $('#btn-arrange').onclick = run(async () => { const n = await api(window.ram.arrangeWindows()); log(n ? `Arranged ${n} Roblox window(s) into a grid` : 'No Roblox windows to arrange'); });
   $('#search').oninput = e => { state.filter = e.target.value; renderAccounts(); };
 
   $('#btn-select-all').onclick = () => {
@@ -748,6 +752,8 @@ function bind() {
   $('#f-alias').onkeydown = e => { if (e.key === 'Enter') $('#btn-set-alias').click(); };
   $('#btn-set-group').onclick = run(() => setField('group', $('#f-group').value.trim() || 'Default'));
   $('#f-group').onkeydown = e => { if (e.key === 'Enter') $('#btn-set-group').click(); };
+  $('#btn-set-proxy').onclick = run(() => setField('proxy', $('#f-proxy').value.trim()));
+  $('#f-proxy').onkeydown = e => { if (e.key === 'Enter') $('#btn-set-proxy').click(); };
 
   // utilities dialog — each action shows a working/done result in the dialog
   const utilsAction = async (label, ids, fn) => {
@@ -781,6 +787,7 @@ function bind() {
   // settings
   $('#btn-settings').onclick = () => {
     const s = state.settings;
+    $('#s-theme').value = s.theme || 'dark';
     $('#s-multiRoblox').checked = s.multiRoblox;
     $('#s-closeLastOnLaunch').checked = s.closeLastOnLaunch;
     $('#s-killClosedClients').checked = s.killClosedClients !== false;
@@ -799,6 +806,7 @@ function bind() {
   };
   $('#btn-settings-save').onclick = run(async () => {
     state.settings = await api(window.ram.setSettings({
+      theme: $('#s-theme').value,
       multiRoblox: $('#s-multiRoblox').checked,
       closeLastOnLaunch: $('#s-closeLastOnLaunch').checked,
       killClosedClients: $('#s-killClosedClients').checked,
@@ -814,9 +822,12 @@ function bind() {
       autoKeepAlive: $('#s-autoKeepAlive').checked,
       autoKeepAliveDays: Math.max(1, Number($('#s-autoKeepAliveDays').value) || 14),
     }));
+    applyTheme(state.settings.theme);
     updateMultiStatus(); renderAccounts();
     $('#dlg-settings').close();
   });
+  // Live preview while the dialog is open.
+  $('#s-theme').onchange = () => applyTheme($('#s-theme').value);
 
   for (const dlg of $$('.dialog')) dlg.querySelector('[data-close]')?.addEventListener('click', () => dlg.close());
 
@@ -878,6 +889,7 @@ window.ram.onJoining(active => {
     return;
   }
   state.settings = init.settings;
+  applyTheme(state.settings.theme);
   state.multiRobloxActive = init.multiRoblox;
   state.version = init.version;
   if (init.version) $('#about-version').textContent = 'v' + init.version;
