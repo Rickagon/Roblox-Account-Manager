@@ -108,26 +108,27 @@ label.check input { width: auto; margin: 0; }
 }
 .pill.on { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 50%, transparent); }
 
-/* "Multi-Roblox: off" -> a shiny red, softly glowing pill inviting a one-click fix. */
+/* "Multi-Roblox: off" -> a shiny red rounded pill inviting a one-click fix.
+   No big box-shadow halo: the side panel has overflow:auto and would clip it
+   into a hard rectangle. The "glow" is a moving shine + a brightness breathe,
+   both contained within the rounded shape so it never looks boxy. */
 .pill.fixable {
   cursor: pointer;
   color: #fff;
   border: none;
   border-radius: 999px;
-  padding: 4px 13px;
-  background-image: linear-gradient(100deg, #c7362f 0%, #ff5a5f 50%, #c7362f 100%);
+  padding: 5px 14px;
+  background-image: linear-gradient(100deg, #c7362f 0%, #ff6468 48%, #c7362f 100%);
   background-size: 220% 100%;
-  animation: ram-shine 2.6s linear infinite, ram-glow 1.9s ease-in-out infinite;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, .25);
+  animation: ram-shine 2.6s linear infinite, ram-breathe 1.9s ease-in-out infinite;
   user-select: none;
 }
-.pill.fixable:hover { filter: brightness(1.1) saturate(1.08); }
+.pill.fixable:hover { filter: brightness(1.12) saturate(1.08); }
 .pill.fixable.working { animation: none; opacity: .7; cursor: progress; }
 @keyframes ram-shine { to { background-position: -220% 0; } }
-@keyframes ram-glow {
-  0%, 100% { box-shadow: 0 0 6px 1px rgba(229, 72, 77, .45); }
-  50% { box-shadow: 0 0 18px 5px rgba(229, 72, 77, .8); }
-}
-@media (prefers-reduced-motion: reduce) { .pill.fixable { animation: ram-glow 1.9s ease-in-out infinite; } }
+@keyframes ram-breathe { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.2); } }
+@media (prefers-reduced-motion: reduce) { .pill.fixable { animation: none; } }
 
 #confirm-msg { white-space: pre-line; color: var(--text); margin: 2px 0 10px; }
 
