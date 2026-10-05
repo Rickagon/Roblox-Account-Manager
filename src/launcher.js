@@ -137,9 +137,9 @@ async function killProcesses(pids) {
   await ps(`Stop-Process -Id ${pids.map(Number).filter(Boolean).join(',')} -Force -ErrorAction SilentlyContinue`);
 }
 
-// Modern Roblox doesn't put an account id in the client process, so windows are
-// matched to accounts by launch order instead: list the current game windows,
-// and the app assigns each new one the next queued account name.
+// Each client we launch carries its account's browserTrackerId in its command
+// line, so a window is matched to its account by reading that tracker id back
+// off the process — exact and unique, no launch-order or start-time guessing.
 
 /** Visible top-level windows owned by RobloxPlayerBeta -> [{ hwnd, title }]. */
 async function listRobloxWindows() {
@@ -193,10 +193,11 @@ foreach ($prop in $m.PSObject.Properties) {
 }
 
 /**
- * Map each visible Roblox game window to the real Roblox userId of the account
- * running it, by matching the window's process start time to its session log
- * (whose GameJoinLoadTime line contains "userid:<id>"). Returns [{hwnd, userid}].
- * This is exact regardless of load order.
+ * Map each visible Roblox game window to the browserTrackerId of the account
+ * running it, read straight from the client's command line (every client we
+ * launch carries "browsertrackerid:<id>"). Returns [{hwnd, tracker}]. This is
+ * exact and unique per account — no start-time guessing, so two clients that
+ * launch in the same second can't be mislabelled as each other.
  */
 async function getWindowAccounts() {
   const out = await ps(`
@@ -224,36 +225,24 @@ $cb = [RamWA+EnumWindowsProc]{ param($h,$l)
 [RamWA]::EnumWindows($cb, [IntPtr]::Zero) | Out-Null
 if ($wins.Count -eq 0) { return }
 
-$create = @{}
+$cmd = @{}
 Get-CimInstance Win32_Process -Filter "Name='RobloxPlayerBeta.exe'" | ForEach-Object {
-  $create[[int]$_.ProcessId] = [datetimeoffset]($_.CreationDate.ToUniversalTime())
-}
-
-$logdir = Join-Path $env:LOCALAPPDATA 'Roblox\\logs'
-$logs = New-Object System.Collections.ArrayList
-Get-ChildItem $logdir -Filter '*.log' -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 60 | ForEach-Object {
-  if ($_.Name -match '(\\d{8}T\\d{6}Z)') {
-    try { $t = [datetimeoffset]::ParseExact($matches[1],'yyyyMMddTHHmmssZ',$null,[System.Globalization.DateTimeStyles]::AssumeUniversal) } catch { $t = [datetimeoffset]$_.CreationTimeUtc }
-    $m = Select-String -Path $_.FullName -Pattern 'userid:(\\d+)' -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($m) { [void]$logs.Add([pscustomobject]@{ time=$t; uid=$m.Matches[0].Groups[1].Value }) }
-  }
+  $cmd[[int]$_.ProcessId] = $_.CommandLine
 }
 
 $lines = New-Object System.Collections.ArrayList
 foreach ($w in $wins) {
-  $pc = $create[[int]$w.procId]
-  if (-not $pc) { continue }
-  $best = $null; $bestDiff = [double]::MaxValue
-  foreach ($li in $logs) {
-    $d = [math]::Abs(($li.time - $pc).TotalSeconds)
-    if ($d -lt $bestDiff) { $bestDiff = $d; $best = $li }
-  }
-  if ($best -and $bestDiff -le 120) { [void]$lines.Add(("{0}\`t{1}" -f $w.hwnd, $best.uid)) }
+  $cl = $cmd[[int]$w.procId]
+  if (-not $cl) { continue }
+  $tid = $null
+  if ($cl -match 'browsertrackerid[:=](\\d+)') { $tid = $matches[1] }
+  elseif ($cl -match '-b\\s+(\\d+)') { $tid = $matches[1] }
+  if ($tid) { [void]$lines.Add(("{0}\`t{1}" -f $w.hwnd, $tid)) }
 }
 $lines -join "\`n"`);
   return String(out).split('\n').map(l => l.trim()).filter(Boolean).map(l => {
     const i = l.indexOf('\t');
-    return i === -1 ? null : { hwnd: l.slice(0, i), userid: l.slice(i + 1) };
+    return i === -1 ? null : { hwnd: l.slice(0, i), tracker: l.slice(i + 1) };
   }).filter(Boolean);
 }
 

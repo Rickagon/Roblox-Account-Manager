@@ -62,9 +62,13 @@ class Vault {
         const parsed = JSON.parse(json);
         if (!Array.isArray(parsed)) throw new Error('not an array');
         this.accounts = parsed;
+        // Backfill tracker ids for any older accounts missing one, so window
+        // labelling and closing the previous client can match them.
+        let backfilled = false;
+        for (const a of this.accounts) if (a && !a.browserTrackerId) { a.browserTrackerId = randomTrackerId(); backfilled = true; }
         this.loadFailed = false;
         if (parsed.length > 0) this._loadedNonEmpty = true;
-        if (old) { this._migrate = true; this.saveNow(); } // re-write as DPAPI
+        if (old || backfilled) { this._migrate = true; this.saveNow(); } // re-write as DPAPI / persist tracker backfill
         return { ok: true, hadFile };
       } catch (e) {
         try { fs.appendFileSync(this.file + '.error.log', `[${new Date().toISOString()}] pid ${process.pid} ${f}: ${e.message}\n`); } catch { /* ignore */ }
@@ -162,6 +166,10 @@ class Vault {
       };
       this.accounts.push(acc);
     }
+    // Every account needs a tracker id: it's how launched clients are matched
+    // back to their account (window titles, closing the old client). RAM imports
+    // can arrive without one, and `...data` above can override the default.
+    if (!acc.browserTrackerId) acc.browserTrackerId = randomTrackerId();
     this.save();
     return acc;
   }

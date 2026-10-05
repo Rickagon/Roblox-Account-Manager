@@ -437,10 +437,10 @@ function startWindowLabeler() {
   windowLabelTimer = setInterval(async () => {
     try {
       if (settings.labelWindows === false) return;
-      const wins = await launcher.getWindowAccounts(); // [{ hwnd, userid }]
+      const wins = await launcher.getWindowAccounts(); // [{ hwnd, tracker }]
       const apply = {};
       for (const w of wins) {
-        const acc = vault.accounts.find(a => String(a.userId) === String(w.userid));
+        const acc = vault.accounts.find(a => String(a.browserTrackerId) === String(w.tracker));
         if (acc) apply[w.hwnd] = acc.username;
       }
       if (Object.keys(apply).length) { await launcher.applyWindowTitles(apply); windowLabelMisses = 0; }
