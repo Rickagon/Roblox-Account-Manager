@@ -131,7 +131,19 @@ label.check input { width: auto; margin: 0; }
 .badge.bad { background: color-mix(in srgb, var(--danger) 18%, transparent); color: var(--danger); }
 .badge.nopw { background: var(--panel-2); color: var(--muted); }
 
-.empty { text-align: center; margin-top: 80px; }
+.empty { text-align: center; margin-top: 48px; }
+.empty h2 { margin: 0 0 4px; }
+.welcome-options { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; max-width: 560px; margin: 18px auto; }
+.welcome-opt { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; text-align: left; padding: 11px 13px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; color: var(--text); }
+.welcome-opt:hover { border-color: var(--accent); }
+.welcome-opt b { font-size: 13px; }
+.welcome-opt span { font-size: 11px; color: var(--muted); font-weight: 400; }
+.welcome-opt code { font-size: 10.5px; background: rgba(255,255,255,.06); padding: 0 3px; border-radius: 3px; }
+
+/* Auto-update banner */
+.update-banner { display: flex; align-items: center; gap: 10px; padding: 7px 14px; background: color-mix(in srgb, var(--accent) 16%, var(--panel)); border-bottom: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); font-size: 13px; }
+.update-banner #update-text { flex: 1; }
+.update-banner.hidden { display: none; }
 
 .side {
   width: 310px; flex: none;

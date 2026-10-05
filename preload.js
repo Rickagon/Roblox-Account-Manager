@@ -32,6 +32,11 @@ contextBridge.exposeInMainWorld('ram', {
   removeRecent: placeId => call('recent:remove', placeId),
   closeAllRoblox: () => call('roblox:closeAll'),
 
+  checkUpdate: () => call('update:check'),
+  applyUpdate: () => call('update:apply'),
+  copyText: text => call('clipboard:write', text),
+  appInfo: () => call('app:info'),
+
   pickRamFile: () => call('import:pick'),
   importRam: (file, password) => call('import:ram', file, password),
   openExternal: url => call('open:external', url),
@@ -44,4 +49,5 @@ contextBridge.exposeInMainWorld('ram', {
   onKeepAlive: fn => on('keepalive', fn),
   onJoining: fn => on('joining', fn),
   onMultiRoblox: fn => on('multiRoblox', fn),
+  onUpdate: fn => on('update', fn),
 });

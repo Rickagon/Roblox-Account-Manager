@@ -475,6 +475,82 @@ async function grabLockIfClear() {
   }
 }
 
+// ---------- Auto-update ----------
+// Checks the public GitHub repo's latest release on startup. If it's newer, the
+// renderer shows an "Update available" banner; applying it downloads the release
+// zip and hands off to a detached PowerShell script that waits for the app to
+// close, copies the new files over the install folder, and relaunches.
+const UPDATE_REPO = 'Rickagon/Roblox-Account-Manager';
+
+function versionParts(v) { return String(v || '').replace(/^v/, '').split('.').map(n => parseInt(n, 10) || 0); }
+function isNewerVersion(remote, local) {
+  const r = versionParts(remote), l = versionParts(local);
+  for (let i = 0; i < Math.max(r.length, l.length); i++) {
+    if ((r[i] || 0) !== (l[i] || 0)) return (r[i] || 0) > (l[i] || 0);
+  }
+  return false;
+}
+
+let pendingUpdate = null; // { version, url }
+async function checkForUpdate(manual = false) {
+  try {
+    const res = await fetch(`https://api.github.com/repos/${UPDATE_REPO}/releases/latest`, {
+      headers: { 'User-Agent': 'RAM-v2', Accept: 'application/vnd.github+json' },
+    });
+    if (!res.ok) throw new Error(`GitHub returned ${res.status}`);
+    const rel = await res.json();
+    const asset = (rel.assets || []).find(a => /\.zip$/i.test(a.name));
+    if (!asset) throw new Error('the latest release has no downloadable .zip');
+    if (isNewerVersion(rel.tag_name, app.getVersion())) {
+      pendingUpdate = { version: String(rel.tag_name).replace(/^v/, ''), url: asset.browser_download_url };
+      send('update', pendingUpdate);
+    } else if (manual) {
+      send('update', { upToDate: true, version: app.getVersion() });
+    }
+  } catch (e) {
+    if (manual) log(`Update check failed: ${e.message}`, 'error');
+  }
+}
+
+async function applyUpdate() {
+  if (!pendingUpdate) throw new Error('No update is available');
+  if (!app.isPackaged) throw new Error('Auto-update only works in the installed app, not from source');
+  const os = require('os');
+  const { spawn } = require('child_process');
+  const tmp = path.join(os.tmpdir(), 'ram-update');
+  const zip = path.join(tmp, 'update.zip');
+  try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { /* fresh */ }
+  fs.mkdirSync(tmp, { recursive: true });
+
+  log(`Downloading update v${pendingUpdate.version}…`);
+  const res = await fetch(pendingUpdate.url, { headers: { 'User-Agent': 'RAM-v2' } });
+  if (!res.ok) throw new Error(`download failed (${res.status})`);
+  fs.writeFileSync(zip, Buffer.from(await res.arrayBuffer()));
+
+  const dest = path.dirname(process.execPath); // the install folder
+  const unpack = path.join(tmp, 'new');
+  const updater = path.join(tmp, 'apply-update.ps1');
+  // Extract, wait for this app to exit, copy over the install folder, relaunch.
+  const script = `param([int]$ProcId,[string]$Zip,[string]$Unpack,[string]$Dest,[string]$Exe)
+$ErrorActionPreference='SilentlyContinue'
+Remove-Item $Unpack -Recurse -Force
+New-Item -ItemType Directory -Force -Path $Unpack | Out-Null
+Expand-Archive -Path $Zip -DestinationPath $Unpack -Force
+try { Wait-Process -Id $ProcId -Timeout 60 } catch {}
+Start-Sleep -Seconds 1
+robocopy $Unpack $Dest /E /R:4 /W:1 /NFL /NDL /NJH /NJS | Out-Null
+Start-Process -FilePath $Exe
+`;
+  fs.writeFileSync(updater, script, 'utf8');
+  log('Installing update — the app will restart…');
+  const child = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', updater,
+    '-ProcId', String(process.pid), '-Zip', zip, '-Unpack', unpack, '-Dest', dest, '-Exe', process.execPath],
+    { detached: true, stdio: 'ignore', windowsHide: true });
+  child.unref();
+  setTimeout(() => { isQuitting = true; app.quit(); }, 500); // give the log time to show
+  return true;
+}
+
 // ---------- IPC ----------
 
 function handle(channel, fn) {
@@ -889,6 +965,11 @@ function registerIpc() {
 
   handle('open:repo', () => { shell.openExternal('https://github.com/Rickagon/Roblox-Account-Manager'); });
 
+  handle('update:check', () => checkForUpdate(true));
+  handle('update:apply', () => applyUpdate());
+  handle('clipboard:write', text => { clipboard.writeText(String(text || '')); return true; });
+  handle('app:info', () => ({ version: app.getVersion(), platform: process.platform, arch: process.arch, electron: process.versions.electron }));
+
   handle('open:external', url => {
     if (/^https:\/\/(www\.)?roblox\.com\//.test(url)) shell.openExternal(url);
   });
@@ -1011,6 +1092,7 @@ if (!gotLock) {
       pollPresence();
       keepAlive(false);
       if (vault.accounts.some(a => !a.avatarUrl)) refreshAvatars();
+      if (app.isPackaged) setTimeout(() => checkForUpdate(false), 3000); // quiet auto-check on startup
     });
   });
 

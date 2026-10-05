@@ -36,8 +36,12 @@ async function api(promise) {
 const run = fn => (...a) => Promise.resolve(fn(...a)).catch(e => log(e.message, 'error'));
 
 let statusTimer;
+const logHistory = []; // kept for the "Copy logs" bug-report button
 function log(msg, level = 'info') {
   (level === 'error' ? console.error : console.log)(msg);
+  const time = new Date().toLocaleTimeString();
+  logHistory.push(`[${time}] ${level === 'error' ? 'ERROR ' : ''}${msg}`);
+  if (logHistory.length > 300) logHistory.shift();
   const bar = $('#status');
   if (!bar) return;
   bar.textContent = msg;
@@ -815,6 +819,28 @@ function bind() {
   });
 
   for (const dlg of $$('.dialog')) dlg.querySelector('[data-close]')?.addEventListener('click', () => dlg.close());
+
+  // First-run welcome: each option just runs the matching Add Account flow.
+  for (const b of $$('.welcome-opt')) b.onclick = run(() => addAccount(b.getAttribute('data-welcome')));
+
+  // Update banner
+  $('#update-now').onclick = run(async () => {
+    $('#update-now').disabled = true;
+    $('#update-text').textContent = 'Downloading update… the app will restart.';
+    await api(window.ram.applyUpdate());
+  });
+  $('#update-dismiss').onclick = () => $('#update-banner').classList.add('hidden');
+
+  // Settings: manual update check + copy logs
+  $('#btn-check-update').onclick = run(async () => { log('Checking for updates…'); await api(window.ram.checkUpdate()); });
+  $('#btn-copy-logs').onclick = run(async () => {
+    let info = {};
+    try { info = await api(window.ram.appInfo()); } catch { /* best effort */ }
+    const header = `Roblox Account Manager v${info.version || state.version || '?'} | ${info.platform || ''} ${info.arch || ''} | Electron ${info.electron || ''}`;
+    const text = `${header}\nUserAgent: ${navigator.userAgent}\n\n--- recent logs ---\n${logHistory.join('\n') || '(no log entries yet)'}`;
+    await api(window.ram.copyText(text));
+    log('Logs copied — paste them into a GitHub issue');
+  });
 }
 
 // ---------- events from main ----------
@@ -826,6 +852,13 @@ window.ram.onAccounts(list => {
 window.ram.onPresence(p => { state.presence = p; if (!isDragging) applyPresence(); });
 window.ram.onLog(({ msg, level }) => log(msg, level === 'error' ? 'error' : 'info'));
 window.ram.onMultiRoblox(active => { state.multiRobloxActive = active; updateMultiStatus(); });
+window.ram.onUpdate(info => {
+  const banner = $('#update-banner');
+  if (info.upToDate) { log(`You're on the latest version (v${info.version})`); return; }
+  $('#update-text').textContent = `Update available — v${info.version}. You're on v${state.version || '?'}.`;
+  $('#update-now').disabled = false;
+  banner.classList.remove('hidden');
+});
 window.ram.onJoining(active => {
   const btn = $('#btn-join');
   btn.disabled = active;              // can't accidentally re-launch mid-batch
@@ -846,6 +879,7 @@ window.ram.onJoining(active => {
   }
   state.settings = init.settings;
   state.multiRobloxActive = init.multiRoblox;
+  state.version = init.version;
   if (init.version) $('#about-version').textContent = 'v' + init.version;
   $('#about-repo').onclick = e => { e.preventDefault(); window.ram.openRepo(); };
   state.accounts = init.accounts || [];
