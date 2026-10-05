@@ -634,6 +634,23 @@ function registerIpc() {
 
   handle('roblox:arrange', () => launcher.arrangeWindows());
 
+  // One-click fix for the "Multi-Roblox: off" pill. Turns the setting on if it
+  // was off, and grabs the lock if nothing is running. If clients ARE running
+  // (so the lock is held by a Roblox), it reports back so the UI can confirm
+  // before closing them — the caller then uses roblox:closeAll to reclaim.
+  handle('multiRoblox:fix', async () => {
+    if (!settings.multiRoblox) { settings.multiRoblox = true; saveSettings(); }
+    if (launcher.isMultiRobloxOwned()) { send('multiRoblox', true); return { owned: true }; }
+    const running = await launcher.countRobloxClients().catch(() => 0);
+    if (running === 0) {
+      launcher.disableMultiRoblox();
+      await new Promise(r => setTimeout(r, 300));
+      await ensureMultiRoblox();
+      return { owned: launcher.isMultiRobloxOwned() };
+    }
+    return { owned: false, needsClose: true, running };
+  });
+
   handle('account:update', (id, patch) => {
     const allowed = ['alias', 'description', 'group', 'proxy'];
     const clean = Object.fromEntries(Object.entries(patch).filter(([k]) => allowed.includes(k)));

@@ -508,8 +508,30 @@ function saveTargets(now = false) {
 function updateMultiStatus() {
   // Reflect whether Multi-Roblox is actually active, not just the setting.
   const on = !!state.multiRobloxActive;
-  $('#multi-status').textContent = `Multi-Roblox: ${on ? 'on' : 'off'}`;
-  $('#multi-status').classList.toggle('on', on);
+  const el = $('#multi-status');
+  el.textContent = on ? 'Multi-Roblox: on' : 'Multi-Roblox: off — click to fix';
+  el.classList.toggle('on', on);
+  el.classList.toggle('fixable', !on); // shiny animated "fix me" button when off
+  el.title = on ? 'Multi-Roblox is active' : 'Click to re-claim the Multi-Roblox lock';
+}
+
+async function fixMultiRoblox() {
+  if (state.multiRobloxActive) return;
+  const el = $('#multi-status');
+  el.classList.add('working');
+  try {
+    const r = await api(window.ram.fixMultiRoblox());
+    if (r.owned) { log('Multi-Roblox is on ✓'); return; }
+    if (r.needsClose) {
+      if (confirm(`A Roblox client is already running, so the app can't take the lock.\n\nClose ${r.running} running client(s) now so Multi-Roblox can turn on?`)) {
+        await api(window.ram.closeAllRoblox());
+      }
+    } else {
+      log('Could not take the Multi-Roblox lock — close all Roblox, then try again.', 'error');
+    }
+  } finally {
+    el.classList.remove('working');
+  }
 }
 
 // ---------- actions ----------
@@ -719,6 +741,7 @@ function bind() {
   $('#hide-usernames').onchange = e => { document.body.classList.toggle('hide-names', e.target.checked); safeSet('hideUsernames', e.target.checked ? '1' : ''); };
   $('#btn-close-roblox').onclick = run(async () => { const n = await api(window.ram.closeAllRoblox()); log(`Stopped the queue and closed ${n} Roblox client(s)`); });
   $('#btn-arrange').onclick = run(async () => { const n = await api(window.ram.arrangeWindows()); log(n ? `Arranged ${n} Roblox window(s) into a grid` : 'No Roblox windows to arrange'); });
+  $('#multi-status').onclick = run(fixMultiRoblox);
   $('#search').oninput = e => { state.filter = e.target.value; renderAccounts(); };
 
   $('#btn-select-all').onclick = () => {

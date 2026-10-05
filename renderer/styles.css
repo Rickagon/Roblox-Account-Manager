@@ -108,6 +108,28 @@ label.check input { width: auto; margin: 0; }
 }
 .pill.on { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 50%, transparent); }
 
+/* "Multi-Roblox: off" → a shiny, pulsing button inviting a one-click fix. */
+.pill.fixable {
+  cursor: pointer;
+  color: #fff;
+  border-color: transparent;
+  background-image: linear-gradient(100deg,
+    color-mix(in srgb, var(--warn) 85%, #000) 0%,
+    var(--accent) 45%,
+    color-mix(in srgb, var(--warn) 85%, #000) 90%);
+  background-size: 220% 100%;
+  animation: ram-shine 2.4s linear infinite, ram-pulse 2.4s ease-in-out infinite;
+  user-select: none;
+}
+.pill.fixable:hover { filter: brightness(1.12) saturate(1.1); }
+.pill.fixable.working { animation: none; opacity: .7; cursor: progress; }
+@keyframes ram-shine { to { background-position: -220% 0; } }
+@keyframes ram-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--warn) 55%, transparent); }
+  50% { box-shadow: 0 0 11px 2px color-mix(in srgb, var(--warn) 60%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) { .pill.fixable { animation: ram-pulse 2.4s ease-in-out infinite; } }
+
 .layout { flex: 1; display: flex; min-height: 0; }
 .accounts { flex: 1; display: flex; flex-direction: column; min-width: 0; padding: 12px 12px 0 16px; }
 .list-tools { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; }
