@@ -33,6 +33,7 @@ contextBridge.exposeInMainWorld('ram', {
   closeAllRoblox: () => call('roblox:closeAll'),
   arrangeWindows: () => call('roblox:arrange'),
   fixMultiRoblox: () => call('multiRoblox:fix'),
+  forceFixMultiRoblox: () => call('multiRoblox:forceFix'),
 
   checkUpdate: () => call('update:check'),
   applyUpdate: () => call('update:apply'),

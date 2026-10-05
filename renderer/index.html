@@ -129,6 +129,15 @@
   <!-- right-click context menu -->
   <div id="ctx-menu" class="ctx hidden"></div>
 
+  <dialog id="dlg-confirm" class="dialog">
+    <div class="dialog-head"><h3 id="confirm-title">Confirm</h3><button class="icon" data-close>✕</button></div>
+    <p id="confirm-msg"></p>
+    <div class="row end">
+      <button id="confirm-cancel" class="small">Cancel</button>
+      <button id="confirm-ok" class="primary">Confirm</button>
+    </div>
+  </dialog>
+
   <dialog id="dlg-servers" class="dialog wide">
     <div class="dialog-head">
       <h3 id="servers-title">Servers</h3>

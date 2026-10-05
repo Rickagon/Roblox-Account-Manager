@@ -641,14 +641,30 @@ function registerIpc() {
   handle('multiRoblox:fix', async () => {
     if (!settings.multiRoblox) { settings.multiRoblox = true; saveSettings(); }
     if (launcher.isMultiRobloxOwned()) { send('multiRoblox', true); return { owned: true }; }
-    const running = await launcher.countRobloxClients().catch(() => 0);
-    if (running === 0) {
+    // Count ALL Roblox processes (not just windowed ones) - a client that's still
+    // loading, or lingering, can hold the lock without a window.
+    const procs = await launcher.listRobloxProcesses().catch(() => []);
+    if (procs.length === 0) {
       launcher.disableMultiRoblox();
       await new Promise(r => setTimeout(r, 300));
       await ensureMultiRoblox();
       return { owned: launcher.isMultiRobloxOwned() };
     }
-    return { owned: false, needsClose: true, running };
+    return { owned: false, needsClose: true, running: procs.length };
+  });
+
+  // Close every Roblox client, then re-grab the lock. Used by the fix pill after
+  // the user confirms. Reuses the same path as "Stop & Close All".
+  handle('multiRoblox:forceFix', async () => {
+    joinCancel = true;
+    await new Promise(res => require('child_process').exec('taskkill /IM RobloxPlayerBeta.exe /F', () => res()));
+    launcher.disableMultiRoblox();
+    for (let i = 0; i < 12; i++) {
+      if ((await launcher.listRobloxProcesses().catch(() => [{}])).length === 0) break;
+      await new Promise(r => setTimeout(r, 250));
+    }
+    await ensureMultiRoblox();
+    return { owned: launcher.isMultiRobloxOwned() };
   });
 
   handle('account:update', (id, patch) => {

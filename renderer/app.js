@@ -520,14 +520,17 @@ async function fixMultiRoblox() {
   el.classList.add('working');
   try {
     const r = await api(window.ram.fixMultiRoblox());
-    if (r.owned) { log('Multi-Roblox is on ✓'); return; }
-    if (r.needsClose) {
-      if (confirm(`A Roblox client is already running, so the app can't take the lock.\n\nClose ${r.running} running client(s) now so Multi-Roblox can turn on?`)) {
-        await api(window.ram.closeAllRoblox());
-      }
-    } else {
-      log('Could not take the Multi-Roblox lock - close all Roblox, then try again.', 'error');
-    }
+    if (r.owned) { log('Multi-Roblox is on'); return; }
+    // The lock is held by a running Roblox - confirm, then close it all and reclaim.
+    const n = r.running || 0;
+    const ok = await confirmDialog(
+      `${n ? `${n} Roblox client${n > 1 ? 's are' : ' is'} running` : 'Roblox is running'}, so the app can't take the Multi-Roblox lock.\n\nClose ${n > 1 ? 'them' : 'it'} now so Multi-Roblox turns on?`,
+      'Close Roblox to fix Multi-Roblox?',
+      'Close Roblox');
+    if (!ok) return;
+    el.classList.add('working');
+    const res = await api(window.ram.forceFixMultiRoblox());
+    log(res.owned ? 'Multi-Roblox is on' : "Still couldn't take the lock - try Stop & Close All.", res.owned ? 'info' : 'error');
   } finally {
     el.classList.remove('working');
   }
@@ -586,6 +589,22 @@ function prompt(title, value = '', type = 'text') {
     input.onkeydown = e => { if (e.key === 'Enter') done(input.value); };
     dlg.querySelector('[data-close]').onclick = () => done(null);
     dlg.showModal(); input.focus();
+  });
+}
+
+function confirmDialog(message, title = 'Confirm', okLabel = 'Confirm') {
+  return new Promise(resolve => {
+    const dlg = $('#dlg-confirm');
+    $('#confirm-title').textContent = title;
+    $('#confirm-msg').textContent = message;
+    $('#confirm-ok').textContent = okLabel;
+    let done = false;
+    const finish = r => { if (done) return; done = true; dlg.close(); resolve(r); };
+    $('#confirm-ok').onclick = () => finish(true);
+    $('#confirm-cancel').onclick = () => finish(false);
+    dlg.querySelector('[data-close]').onclick = () => finish(false);
+    dlg.showModal();
+    $('#confirm-ok').focus();
   });
 }
 
