@@ -10,7 +10,7 @@ keep sessions alive.
 
 ## Download & run (no terminal, no Node)
 
-1. Go to the **[latest release](https://github.com/Rickagon/RobloxAccountManagerV2/releases/latest)**.
+1. Go to the **[latest release](https://github.com/Rickagon/Roblox-Account-Manager/releases/latest)**.
 2. Download **`RobloxAccountManager-win-x64.zip`**.
 3. **Unzip it** anywhere (e.g. your Desktop). Keep the whole folder together.
 4. Open the folder and double-click **`Roblox Account Manager.exe`**.
@@ -60,7 +60,7 @@ source you need [Node.js](https://nodejs.org) (v18 or newer):
 
 ```bash
 git clone <your-repo-url>
-cd RobloxAccountManagerV2
+cd Roblox-Account-Manager
 npm install
 npm start          # run in dev
 npm run pack       # build the standalone .exe into dist/

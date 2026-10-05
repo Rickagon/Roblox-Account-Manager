@@ -887,7 +887,7 @@ function registerIpc() {
     return { added, updated };
   });
 
-  handle('open:repo', () => { shell.openExternal('https://github.com/Rickagon/RobloxAccountManagerV2'); });
+  handle('open:repo', () => { shell.openExternal('https://github.com/Rickagon/Roblox-Account-Manager'); });
 
   handle('open:external', url => {
     if (/^https:\/\/(www\.)?roblox\.com\//.test(url)) shell.openExternal(url);
