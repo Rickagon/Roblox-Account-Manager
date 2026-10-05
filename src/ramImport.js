@@ -14,9 +14,9 @@ const crypto = require('crypto');
 const { execFile } = require('child_process');
 const sodium = require('libsodium-wrappers-sumo');
 
-// "ROBLOX ACCOUNT MANAGER | :) | BROUGHT TO YOU BUY ic3w0lf" — from RAM's AccountManager.cs
+// "ROBLOX ACCOUNT MANAGER | :) | BROUGHT TO YOU BUY ic3w0lf" - from RAM's AccountManager.cs
 const RAM_ENTROPY = Buffer.from('ROBLOX ACCOUNT MANAGER | :) | BROUGHT TO YOU BUY ic3w0lf', 'ascii');
-// The exact RAMHeader byte array from RAM's Cryptography.cs — a password-locked
+// The exact RAMHeader byte array from RAM's Cryptography.cs - a password-locked
 // file begins with these 64 bytes ("Roblox Account Manager created by ic3w0lf22 @ github.com .......").
 const RAM_FULL_HEADER = Buffer.from([
   82, 111, 98, 108, 111, 120, 32, 65, 99, 99, 111, 117, 110, 116, 32, 77, 97, 110, 97, 103, 101, 114, 32,

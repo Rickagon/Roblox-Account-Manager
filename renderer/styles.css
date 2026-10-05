@@ -239,7 +239,7 @@ table.servers th { text-align: left; color: var(--muted); font-weight: 600; padd
 table.servers td { padding: 5px 6px; border-bottom: 1px solid var(--border); }
 table.servers td.mono { font-family: Consolas, monospace; color: var(--muted); }
 
-/* ---------- RAM-style account table ---------- */
+/* ---------- account table ---------- */
 .table {
   flex: 1; min-height: 0;
   display: flex; flex-direction: column;
@@ -382,7 +382,7 @@ select { background: var(--bg); border: 1px solid var(--border); border-radius: 
 .sel-row { display: flex; align-items: center; gap: 7px; padding: 2px 0; }
 .sel-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-/* ---------- dense (RAM-like) compact pass ---------- */
+/* ---------- dense compact pass ---------- */
 body { font-size: 11.5px; line-height: 1.25; }
 .topbar { padding: 4px 10px; }
 .brand { font-size: 12px; }
@@ -440,7 +440,7 @@ label { margin: 6px 0; }
 /* keep the whole right side on screen: cap the account list, cap the selected list */
 .selected-list { max-height: 150px; }
 
-/* ---------- final: RAM-like small window, dense rows (more accounts visible) ---------- */
+/* ---------- final: small window, dense rows (more accounts visible) ---------- */
 body { font-size: 11.5px; line-height: 1.25; }
 .thead > div { padding: 4px 8px; }
 .trow > div { padding: 2px 8px; }
@@ -510,7 +510,7 @@ table.servers th, table.servers td { padding: 4px 6px; }
 /* reorder drop indicator (below a row) */
 .trow.drop-below { box-shadow: inset 0 -2px 0 var(--accent); }
 
-/* ---------- RAM-style: columns on the left, empty select area on the right ---------- */
+/* ---------- columns on the left, empty select area on the right ---------- */
 .thead, .trow { grid-template-columns: 180px 170px 64px 1fr; }
 .trow:hover, .trow.selected { background: transparent; }
 .trow:hover > div:not(.col-fill) { background: var(--panel-2); }

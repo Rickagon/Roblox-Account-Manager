@@ -17,7 +17,7 @@ function ps(script, env = {}) {
 /**
  * The command Windows runs for roblox-player: links. Respects Bloxstrap-style
  * launchers if the user installed one. Returns { exe, args } where args contains "%1".
- * Cached for the session (a registry lookup per launch is pure latency) — the
+ * Cached for the session (a registry lookup per launch is pure latency) - the
  * cache is dropped if the resolved exe disappears (e.g. Roblox updated).
  */
 let cachedHandler = null;
@@ -90,7 +90,7 @@ async function launchUri(uri) {
 async function closeClientsFor(browserTrackerId) {
   // Fast guard first: Get-Process is near-instant, Get-CimInstance Win32_Process
   // (needed for the command line) is slow (~1s). If no Roblox is running there's
-  // nothing to close, so skip the CIM scan entirely — both in one spawn.
+  // nothing to close, so skip the CIM scan entirely - both in one spawn.
   const out = await ps(`
 $ProgressPreference='SilentlyContinue'
 if (-not (Get-Process RobloxPlayerBeta -ErrorAction SilentlyContinue)) { return }
@@ -139,7 +139,7 @@ async function killProcesses(pids) {
 
 // Each client we launch carries its account's browserTrackerId in its command
 // line, so a window is matched to its account by reading that tracker id back
-// off the process — exact and unique, no launch-order or start-time guessing.
+// off the process - exact and unique, no launch-order or start-time guessing.
 
 /** Visible top-level windows owned by RobloxPlayerBeta -> [{ hwnd, title }]. */
 async function listRobloxWindows() {
@@ -196,7 +196,7 @@ foreach ($prop in $m.PSObject.Properties) {
  * Map each visible Roblox game window to the browserTrackerId of the account
  * running it, read straight from the client's command line (every client we
  * launch carries "browsertrackerid:<id>"). Returns [{hwnd, tracker}]. This is
- * exact and unique per account — no start-time guessing, so two clients that
+ * exact and unique per account - no start-time guessing, so two clients that
  * launch in the same second can't be mislabelled as each other.
  */
 async function getWindowAccounts() {

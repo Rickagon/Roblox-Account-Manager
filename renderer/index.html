@@ -32,12 +32,12 @@
         <div id="account-list" class="account-list"></div>
         <div id="empty" class="empty hidden">
           <h2>Welcome 👋</h2>
-          <p class="muted">Add your Roblox accounts to get started — pick whatever fits:</p>
+          <p class="muted">Add your Roblox accounts to get started - pick whatever fits:</p>
           <div class="welcome-options">
-            <button class="welcome-opt" data-welcome="ram"><b>Import from RAM</b><span>Bring over accounts from the old Roblox Account Manager</span></button>
-            <button class="welcome-opt" data-welcome="cookie"><b>Login with cookie(s)</b><span>Paste <code>.ROBLOSECURITY</code> cookies — no captcha</span></button>
+            <button class="welcome-opt" data-welcome="ram"><b>Import from RAM</b><span>Bring over your accounts from an AccountData.json file</span></button>
+            <button class="welcome-opt" data-welcome="cookie"><b>Login with cookie(s)</b><span>Paste <code>.ROBLOSECURITY</code> cookies - no captcha</span></button>
             <button class="welcome-opt" data-welcome="manual"><b>Manual login</b><span>Sign in to one account in a browser window</span></button>
-            <button class="welcome-opt" data-welcome="auto"><b>Auto login (user:pass)</b><span>Paste user:pass lines — may ask for a captcha</span></button>
+            <button class="welcome-opt" data-welcome="auto"><b>Auto login (user:pass)</b><span>Paste user:pass lines - may ask for a captcha</span></button>
           </div>
           <p class="muted small-text">Tip: logging in with <b>cookies</b> never triggers a captcha. Your accounts are stored encrypted on this PC only.</p>
         </div>
@@ -84,7 +84,7 @@
       <div class="card">
         <div class="current-place">
           <span class="muted">Current Place</span>
-          <span id="place-name">—</span>
+          <span id="place-name">-</span>
         </div>
         <label>Place ID
           <input id="place-id" placeholder="Place ID or game link">
@@ -112,10 +112,6 @@
           <input id="f-group" class="grow" list="group-list" placeholder="Group">
           <datalist id="group-list"></datalist>
           <button id="btn-set-group">Set Group</button>
-        </div>
-        <div class="row tight">
-          <input id="f-proxy" class="grow" placeholder="Proxy host:port[:user:pass]" title="Routes this account's browser (login / cookie refresh) through a proxy. Leave blank for none.">
-          <button id="btn-set-proxy">Set Proxy</button>
         </div>
         <p id="edit-target" class="muted small-text">Select accounts to edit</p>
       </div>

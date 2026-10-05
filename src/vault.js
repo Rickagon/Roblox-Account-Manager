@@ -1,6 +1,6 @@
 // Encrypted account storage. Uses Windows DPAPI (current user) directly, which
-// is portable between the dev build and the packaged .exe — same as RAM. Files
-// written by the older Electron safeStorage format are read once and migrated.
+// is portable between the dev build and the packaged .exe. Files written by the
+// older Electron safeStorage format are read once and migrated.
 
 const fs = require('fs');
 const path = require('path');
@@ -96,7 +96,7 @@ class Vault {
     clearTimeout(this._saveTimer);
     this._saveTimer = null;
     // Safety: never wipe. Only write an empty vault if this session actually
-    // loaded accounts and the user removed them all — never because a load
+    // loaded accounts and the user removed them all - never because a load
     // failed or returned empty while good data still sits on disk.
     if (this.accounts.length === 0 && !this._loadedNonEmpty && this._diskHasAccounts()) {
       console.error('Refusing to overwrite existing accounts with an empty vault.');

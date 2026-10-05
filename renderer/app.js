@@ -332,7 +332,7 @@ function setupMarquee() {
     startX = null; mActive = false; dragRows = null;
     if (was) { setDragging(false); suppressNextClick(); renderEditor(); }
     else if (!keep && state.selected.size) {
-      // Plain click on the empty area clears the selection (like RAM).
+      // Plain click on the empty area clears the selection.
       state.selected = new Set(); renderAccounts(); renderEditor();
     }
   };
@@ -417,7 +417,6 @@ function renderEditor() {
     const one = accs.length === 1 ? accs[0] : null;
     $('#f-alias').value = one?.alias || '';
     $('#f-group').value = one ? (one.group || 'Default') : '';
-    $('#f-proxy').value = one?.proxy || '';
   }
   $('#edit-target').textContent = !accs.length ? 'Select accounts to edit'
     : accs.length === 1 ? `Editing ${accs[0].username}` : `Editing ${accs.length} accounts`;
@@ -483,13 +482,13 @@ function updatePlaceName() {
   clearTimeout(placeLookup);
   const place = $('#place-id').value.trim();
   const job = $('#job-id').value.trim();
-  if (!place && !job) { $('#place-name').textContent = '—'; return; }
+  if (!place && !job) { $('#place-name').textContent = '-'; return; }
   $('#place-name').textContent = '…';
   const seq = ++placeLookupSeq;
   placeLookup = setTimeout(async () => {
     const r = await window.ram.resolvePlace(place, job);
     if (seq !== placeLookupSeq) return; // a newer edit superseded this lookup
-    $('#place-name').textContent = r.ok && r.data ? r.data.name : (place || job ? 'Unknown place' : '—');
+    $('#place-name').textContent = r.ok && r.data ? r.data.name : (place || job ? 'Unknown place' : '-');
   }, 400);
 }
 
@@ -509,7 +508,7 @@ function updateMultiStatus() {
   // Reflect whether Multi-Roblox is actually active, not just the setting.
   const on = !!state.multiRobloxActive;
   const el = $('#multi-status');
-  el.textContent = on ? 'Multi-Roblox: on' : 'Multi-Roblox: off — click to fix';
+  el.textContent = on ? 'Multi-Roblox: on' : 'Multi-Roblox: off - click to fix';
   el.classList.toggle('on', on);
   el.classList.toggle('fixable', !on); // shiny animated "fix me" button when off
   el.title = on ? 'Multi-Roblox is active' : 'Click to re-claim the Multi-Roblox lock';
@@ -527,7 +526,7 @@ async function fixMultiRoblox() {
         await api(window.ram.closeAllRoblox());
       }
     } else {
-      log('Could not take the Multi-Roblox lock — close all Roblox, then try again.', 'error');
+      log('Could not take the Multi-Roblox lock - close all Roblox, then try again.', 'error');
     }
   } finally {
     el.classList.remove('working');
@@ -624,10 +623,10 @@ async function addAccount(kind) {
         log(`Imported ${r.added} new, updated ${r.updated}`);
         return;
       } catch (e) {
-        // The file is locked with a RAM password — ask for it and retry.
+        // The file is locked with a RAM password - ask for it and retry.
         if (e.message === 'RAM_PASSWORD_REQUIRED' || e.message === 'RAM_PASSWORD_WRONG') {
           const title = e.message === 'RAM_PASSWORD_WRONG'
-            ? 'Wrong RAM password — try again'
+            ? 'Wrong RAM password - try again'
             : 'This RAM file is password-protected. Enter the RAM password:';
           password = await prompt(title, '', 'password');
           if (password == null) { log('RAM import cancelled'); return; } // user closed the dialog
@@ -644,7 +643,7 @@ async function openUtils() {
   if (!accs.length) return log('Select an account first');
   const one = accs.length === 1 ? accs[0] : null;
   const dlg = $('#dlg-utils');
-  $('#utils-title').textContent = one ? `Account Utilities — ${one.username}` : `Account Utilities — ${accs.length} accounts`;
+  $('#utils-title').textContent = one ? `Account Utilities - ${one.username}` : `Account Utilities - ${accs.length} accounts`;
   $('#u-display').value = one?.displayName || '';
   $('#u-cur').value = ''; $('#u-new').value = '';
   // For a batch, the current-password field is optional (uses saved passwords).
@@ -658,12 +657,12 @@ async function openUtils() {
     $('#utils-summary').textContent = 'Loading summary…';
     const r = await window.ram.summary(one.id);
     if (r.ok) {
-      const s = r.data, fmt = v => v == null ? '—' : v.toLocaleString();
+      const s = r.data, fmt = v => v == null ? '-' : v.toLocaleString();
       $('#utils-summary').replaceChildren(
         el('span', {}, `Robux: ${fmt(s.robux)}`),
         el('span', {}, `Friends: ${fmt(s.friends)}`),
         el('span', {}, `Followers: ${fmt(s.followers)}`),
-        el('span', {}, `Joined: ${s.created ? new Date(s.created).toLocaleDateString() : '—'}`));
+        el('span', {}, `Joined: ${s.created ? new Date(s.created).toLocaleDateString() : '-'}`));
     } else $('#utils-summary').textContent = 'Could not load summary';
   } else {
     $('#utils-summary').textContent = `Changes below apply to all ${accs.length} selected accounts.`;
@@ -703,12 +702,12 @@ async function openServers() {
 async function loadServers() {
   const dlg = $('#dlg-servers');
   const data = await api(window.ram.servers(dlg.dataset.place, dlg.dataset.cursor || ''));
-  if (data.name) $('#servers-title').textContent = `Servers — ${data.name}`;
+  if (data.name) $('#servers-title').textContent = `Servers - ${data.name}`;
   for (const s of data.data || []) {
     $('#servers-body').append(el('tr', {},
       el('td', {}, `${s.playing}/${s.maxPlayers}`),
-      el('td', {}, s.ping != null ? `${s.ping} ms` : '—'),
-      el('td', {}, s.fps != null ? String(Math.round(s.fps)) : '—'),
+      el('td', {}, s.ping != null ? `${s.ping} ms` : '-'),
+      el('td', {}, s.fps != null ? String(Math.round(s.fps)) : '-'),
       el('td', { class: 'mono' }, s.id),
       el('td', {}, el('button', { class: 'small', onclick: () => { $('#job-id').value = s.id; saveTargets(true); dlg.close(); log('Server chosen, press Join Server'); } }, 'Select'))));
   }
@@ -775,16 +774,14 @@ function bind() {
   $('#f-alias').onkeydown = e => { if (e.key === 'Enter') $('#btn-set-alias').click(); };
   $('#btn-set-group').onclick = run(() => setField('group', $('#f-group').value.trim() || 'Default'));
   $('#f-group').onkeydown = e => { if (e.key === 'Enter') $('#btn-set-group').click(); };
-  $('#btn-set-proxy').onclick = run(() => setField('proxy', $('#f-proxy').value.trim()));
-  $('#f-proxy').onkeydown = e => { if (e.key === 'Enter') $('#btn-set-proxy').click(); };
 
-  // utilities dialog — each action shows a working/done result in the dialog
+  // utilities dialog - each action shows a working/done result in the dialog
   const utilsAction = async (label, ids, fn) => {
     utilsResult(`${label}…`, 'working');
     try {
       const ok = await fn();
       const n = typeof ok === 'number' ? ok : ids.length;
-      utilsResult(n >= ids.length ? `✓ ${label} — done for ${n} of ${ids.length}` : `⚠ ${label} — done for ${n} of ${ids.length} (see log)`, n >= ids.length ? 'ok' : 'warn');
+      utilsResult(n >= ids.length ? `✓ ${label} - done for ${n} of ${ids.length}` : `⚠ ${label} - done for ${n} of ${ids.length} (see log)`, n >= ids.length ? 'ok' : 'warn');
     } catch (e) {
       utilsResult(`✕ ${label} failed: ${e.message}`, 'err');
     }
@@ -873,7 +870,7 @@ function bind() {
     const header = `Roblox Account Manager v${info.version || state.version || '?'} | ${info.platform || ''} ${info.arch || ''} | Electron ${info.electron || ''}`;
     const text = `${header}\nUserAgent: ${navigator.userAgent}\n\n--- recent logs ---\n${logHistory.join('\n') || '(no log entries yet)'}`;
     await api(window.ram.copyText(text));
-    log('Logs copied — paste them into a GitHub issue');
+    log('Logs copied - paste them into a GitHub issue');
   });
 }
 
@@ -889,7 +886,7 @@ window.ram.onMultiRoblox(active => { state.multiRobloxActive = active; updateMul
 window.ram.onUpdate(info => {
   const banner = $('#update-banner');
   if (info.upToDate) { log(`You're on the latest version (v${info.version})`); return; }
-  $('#update-text').textContent = `Update available — v${info.version}. You're on v${state.version || '?'}.`;
+  $('#update-text').textContent = `Update available - v${info.version}. You're on v${state.version || '?'}.`;
   $('#update-now').disabled = false;
   banner.classList.remove('hidden');
 });

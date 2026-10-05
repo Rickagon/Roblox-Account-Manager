@@ -14,5 +14,5 @@ npm-debug.log*
 Thumbs.db
 .DS_Store
 
-# Accounts and personal data are NEVER stored in this folder — they live in
-# %USERPROFILE%/.roblox-account-manager-v2 — so there is nothing personal to ignore here.
+# Accounts and personal data are NEVER stored in this folder - they live in
+# %USERPROFILE%/.roblox-account-manager-v2 - so there is nothing personal to ignore here.

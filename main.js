@@ -460,14 +460,14 @@ async function ensureMultiRoblox() {
   if (!settings.multiRoblox || launcher.isMultiRobloxEnabled()) { send('multiRoblox', launcher.isMultiRobloxOwned()); return; }
   const r = await launcher.enableMultiRoblox();
   if (!r.enabled) log('Multi-Roblox could not start. Close the old Roblox Account Manager if it is running, then reopen this app.', 'error');
-  else if (!r.owned) log('Multi-Roblox: a Roblox client is already running, so the app could not take the lock first. Close ALL Roblox windows (or Quit this app from the tray and reopen it) — then it will grab the lock and you can launch multiple.', 'error');
+  else if (!r.owned) log('Multi-Roblox: a Roblox client is already running, so the app could not take the lock first. Close ALL Roblox windows (or Quit this app from the tray and reopen it) - then it will grab the lock and you can launch multiple.', 'error');
   send('multiRoblox', launcher.isMultiRobloxOwned());
 }
 
 // If no Roblox is running, (re)grab the lock so the app OWNS it before launches.
 async function grabLockIfClear() {
   if (!settings.multiRoblox) return;
-  if (launcher.isMultiRobloxOwned()) return; // already own it — skip the process scan + respawn
+  if (launcher.isMultiRobloxOwned()) return; // already own it - skip the process scan + respawn
   const procs = await launcher.listRobloxProcesses().catch(() => [{}]);
   if (procs.length === 0) {
     launcher.disableMultiRoblox();
@@ -496,7 +496,7 @@ let pendingUpdate = null; // { version, url }
 async function checkForUpdate(manual = false) {
   try {
     const res = await fetch(`https://api.github.com/repos/${UPDATE_REPO}/releases/latest`, {
-      headers: { 'User-Agent': 'RAM-v2', Accept: 'application/vnd.github+json' },
+      headers: { 'User-Agent': 'RobloxAccountManagerV2', Accept: 'application/vnd.github+json' },
     });
     if (!res.ok) throw new Error(`GitHub returned ${res.status}`);
     const rel = await res.json();
@@ -524,7 +524,7 @@ async function applyUpdate() {
   fs.mkdirSync(tmp, { recursive: true });
 
   log(`Downloading update v${pendingUpdate.version}…`);
-  const res = await fetch(pendingUpdate.url, { headers: { 'User-Agent': 'RAM-v2' } });
+  const res = await fetch(pendingUpdate.url, { headers: { 'User-Agent': 'RobloxAccountManagerV2' } });
   if (!res.ok) throw new Error(`download failed (${res.status})`);
   fs.writeFileSync(zip, Buffer.from(await res.arrayBuffer()));
 
@@ -543,7 +543,7 @@ robocopy $Unpack $Dest /E /R:4 /W:1 /NFL /NDL /NJH /NJS | Out-Null
 Start-Process -FilePath $Exe
 `;
   fs.writeFileSync(updater, script, 'utf8');
-  log('Installing update — the app will restart…');
+  log('Installing update - the app will restart…');
   const child = spawn('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', updater,
     '-ProcId', String(process.pid), '-Zip', zip, '-Unpack', unpack, '-Dest', dest, '-Exe', process.execPath],
     { detached: true, stdio: 'ignore', windowsHide: true });
@@ -614,7 +614,7 @@ function registerIpc() {
   handle('account:relogin', async id => {
     const acc = vault.get(id);
     log(`Log in as ${acc.username} in the window that opened`);
-    const r = await browser.login(PROFILES_DIR, { username: acc.username, password: acc.password, proxy: acc.proxy });
+    const r = await browser.login(PROFILES_DIR, { username: acc.username, password: acc.password });
     if (!r) return null;
     if (r.user.id !== acc.userId) throw new Error(`You logged in as ${r.user.name}, not ${acc.username}. Nothing was changed.`);
     vault.update(id, { cookie: r.cookie, password: r.password || acc.password, profileDir: r.profileDir, valid: true, cookieUpdatedAt: new Date().toISOString(), lastChecked: new Date().toISOString() });
@@ -637,7 +637,7 @@ function registerIpc() {
   // One-click fix for the "Multi-Roblox: off" pill. Turns the setting on if it
   // was off, and grabs the lock if nothing is running. If clients ARE running
   // (so the lock is held by a Roblox), it reports back so the UI can confirm
-  // before closing them — the caller then uses roblox:closeAll to reclaim.
+  // before closing them - the caller then uses roblox:closeAll to reclaim.
   handle('multiRoblox:fix', async () => {
     if (!settings.multiRoblox) { settings.multiRoblox = true; saveSettings(); }
     if (launcher.isMultiRobloxOwned()) { send('multiRoblox', true); return { owned: true }; }
@@ -652,14 +652,14 @@ function registerIpc() {
   });
 
   handle('account:update', (id, patch) => {
-    const allowed = ['alias', 'description', 'group', 'proxy'];
+    const allowed = ['alias', 'description', 'group'];
     const clean = Object.fromEntries(Object.entries(patch).filter(([k]) => allowed.includes(k)));
     vault.update(id, clean);
     pushAccounts();
   });
 
   handle('account:updateMany', (ids, patch) => {
-    const allowed = ['alias', 'description', 'group', 'proxy'];
+    const allowed = ['alias', 'description', 'group'];
     const clean = Object.fromEntries(Object.entries(patch).filter(([k]) => allowed.includes(k)));
     for (const id of ids) vault.update(id, clean);
     pushAccounts();
@@ -876,7 +876,7 @@ function registerIpc() {
 
   handle('join', async ({ ids, placeId, jobId, followUser }) => {
     // Guard against an accidental second click while a batch is still launching.
-    if (joinInProgress) { log('Already launching — ignoring the extra Join click.'); return; }
+    if (joinInProgress) { log('Already launching - ignoring the extra Join click.'); return; }
     joinInProgress = true;
     joinCancel = false;
     send('joining', true);
@@ -890,7 +890,7 @@ function registerIpc() {
       if (!launcher.isMultiRobloxOwned()) {
         const running = await launcher.countRobloxClients().catch(() => 0);
         if (running > 0) {
-          log('Not launching — a Roblox client is already running and the app doesn\'t hold the Multi-Roblox lock, so launching now would close your current game. Fully close Roblox (or Quit this app from the tray and reopen it) first, then Join again.', 'error');
+          log('Not launching - a Roblox client is already running and the app doesn\'t hold the Multi-Roblox lock, so launching now would close your current game. Fully close Roblox (or Quit this app from the tray and reopen it) first, then Join again.', 'error');
           return;
         }
       }
@@ -902,7 +902,7 @@ function registerIpc() {
         // Cap how many Roblox clients run at once.
         for (let waited = 0; (await launcher.countRobloxClients().catch(() => 0)) >= max; waited += 1.5) {
           if (joinCancel) break;
-          if (waited === 0) log(`Reached the ${max}-client limit — close a Roblox window to launch ${accounts[i].username}`);
+          if (waited === 0) log(`Reached the ${max}-client limit - close a Roblox window to launch ${accounts[i].username}`);
           if (waited >= 120) { log(`Still at the ${max}-client limit after 2 min; stopping.`, 'error'); joinCancel = true; break; }
           await new Promise(r => setTimeout(r, 1500));
         }
@@ -1009,7 +1009,7 @@ function registerIpc() {
         await new Promise(r => setTimeout(r, 250));
       }
       await ensureMultiRoblox();
-      if (launcher.isMultiRobloxOwned()) log('Multi-Roblox lock re-claimed — you can launch multiple clients now.');
+      if (launcher.isMultiRobloxOwned()) log('Multi-Roblox lock re-claimed - you can launch multiple clients now.');
     }
     return out;
   });

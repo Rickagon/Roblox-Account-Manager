@@ -1,16 +1,15 @@
 // Windows DPAPI (CurrentUser) encryption via PowerShell. Unlike Electron's
 // safeStorage, DPAPI is scoped to the Windows user, not the executable, so data
-// written by the dev build and the packaged .exe are interchangeable — same as
-// how ic3w0lf's RAM stores its accounts.
+// written by the dev build and the packaged .exe are interchangeable.
 
 const { execFileSync } = require('child_process');
 const path = require('path');
 
-// Extra entropy mixed into the protection (public, like RAM's — not a secret,
-// just binds the blob to this app so unrelated DPAPI data can't be swapped in).
+// Extra entropy mixed into the protection (public - not a secret, just binds the
+// blob to this app so unrelated DPAPI data can't be swapped in).
 const ENTROPY_B64 = Buffer.from('RobloxAccountManagerV2 | vault | :)', 'utf8').toString('base64');
 
-// Full path to powershell — PATH isn't always inherited in a packaged app.
+// Full path to powershell - PATH isn't always inherited in a packaged app.
 const PWSH = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
 
 function ps(script, inputB64) {

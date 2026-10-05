@@ -43,26 +43,11 @@ function disablePasswordPrompts(profileDir) {
   } catch { /* not fatal */ }
 }
 
-// Parse a per-account proxy string into Playwright's { server, username, password }.
-// Accepts "host:port", "host:port:user:pass", "scheme://host:port", or
-// "scheme://user:pass@host:port". Returns null if empty/unparseable.
-function parseProxy(s) {
-  s = String(s || '').trim();
-  if (!s) return null;
-  let m = s.match(/^(\w+):\/\/(?:([^:@]+):([^@]+)@)?([^:/]+):(\d+)$/);
-  if (m) return { server: `${m[1]}://${m[4]}:${m[5]}`, username: m[2] || undefined, password: m[3] || undefined };
-  const p = s.split(':');
-  if (p.length === 2) return { server: `http://${p[0]}:${p[1]}` };
-  if (p.length === 4) return { server: `http://${p[0]}:${p[1]}`, username: p[2], password: p[3] };
-  return null;
-}
-
 /**
  * @param {string} profileDir
  * @param {{x?:number,y?:number,w?:number,h?:number}} [win] optional window placement
- * @param {string} [proxy] optional per-account proxy (host:port[:user:pass] or URL)
  */
-function launch(profileDir, win = {}, proxy = null) {
+function launch(profileDir, win = {}) {
   // Cache the in-flight promise (not just the resolved context) so two quick
   // calls can't each spawn Chromium against the same profile folder, which is
   // what made browser windows reopen after being closed.
@@ -84,8 +69,6 @@ function launch(profileDir, win = {}, proxy = null) {
     // --no-sandbox warning bar.
     ignoreDefaultArgs: ['--enable-automation', '--no-sandbox'],
   };
-  const pxy = parseProxy(proxy);
-  if (pxy) opts.proxy = pxy; // route this profile's browser traffic through the account's proxy
   const p = (async () => {
     try {
       return await chromium.launchPersistentContext(profileDir, { ...opts, channel: 'chrome' });
@@ -124,9 +107,9 @@ function cookieParam(value) {
  * Opens a login window. Resolves with { cookie, password, user, profileDir }
  * once the user has signed in, or null if they closed the window.
  */
-async function login(profilesRoot, { username = '', password = '', window: win, proxy = '' } = {}) {
+async function login(profilesRoot, { username = '', password = '', window: win } = {}) {
   const profileDir = path.join(profilesRoot, crypto.randomUUID());
-  const ctx = await launch(profileDir, win, proxy);
+  const ctx = await launch(profileDir, win);
   const page = ctx.pages()[0] || (await ctx.newPage());
 
   let capturedPassword = '';
@@ -154,7 +137,7 @@ async function login(profilesRoot, { username = '', password = '', window: win, 
   await applyCss();
 
   if (username) {
-    // Roblox's bot check (Arkose/FunCaptcha) triggers on robotic input — an
+    // Roblox's bot check (Arkose/FunCaptcha) triggers on robotic input - an
     // instant fill() (looks pasted/injected) and an immediate click. A MANUAL
     // login rarely gets a captcha because a person types with real keystrokes,
     // moves the mouse, and pauses. So mimic that: real mouse click to focus,
@@ -167,7 +150,7 @@ async function login(profilesRoot, { username = '', password = '', window: win, 
     const sleep = ms => page.waitForTimeout(ms);
 
     // Paste the value in one shot (like Ctrl+V) instead of typing it. We focus
-    // with a real mouse click, clear, then insertText — a single input event,
+    // with a real mouse click, clear, then insertText - a single input event,
     // no per-key events.
     const pasteFill = async (sel, value) => {
       let el;
@@ -194,10 +177,10 @@ async function login(profilesRoot, { username = '', password = '', window: win, 
     };
 
     // Let Arkose/FunCaptcha's session telemetry initialise on a quiet page before
-    // we interact — touching the form the instant it loads looks scripted.
+    // we interact - touching the form the instant it loads looks scripted.
     await sleep(rand(1500, 3000));
 
-    // A little mouse wander first — movement entropy a real user generates.
+    // A little mouse wander first - movement entropy a real user generates.
     try {
       await page.mouse.move(rand(60, 300), rand(80, 240));
       await sleep(rand(120, 300));
@@ -256,7 +239,7 @@ async function login(profilesRoot, { username = '', password = '', window: win, 
  */
 async function openAccount(account, profileDir, onCookie, url = 'https://www.roblox.com/home') {
   const alreadyOpen = open.has(profileDir);
-  const ctx = await launch(profileDir, {}, account.proxy);
+  const ctx = await launch(profileDir);
 
   if (alreadyOpen) {
     // Reuse the window that's already up: just navigate it, don't wire it twice.
