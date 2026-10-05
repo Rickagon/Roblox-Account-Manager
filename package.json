@@ -1,15 +1,9 @@
 {
   "name": "roblox-account-manager-v2",
-  "version": "1.0.36",
-  "private": true,
+  "version": "1.0.37",
   "description": "Modern Roblox account manager",
   "author": "RAM v2",
   "main": "main.js",
-  "scripts": {
-    "start": "electron .",
-    "pack": "electron-packager . \"Roblox Account Manager\" --platform=win32 --arch=x64 --icon=assets/icon.ico --out=dist --overwrite --app-version=1.0.36",
-    "dist": "electron-builder"
-  },
   "build": {
     "appId": "com.ic3.robloxaccountmanager.v2",
     "productName": "Roblox Account Manager",
@@ -35,11 +29,6 @@
       "createStartMenuShortcut": true,
       "shortcutName": "Roblox Account Manager"
     }
-  },
-  "devDependencies": {
-    "@electron/packager": "^20.3.0",
-    "electron": "^44.4.5",
-    "electron-builder": "^25.1.8"
   },
   "dependencies": {
     "libsodium-wrappers-sumo": "^0.7.15",

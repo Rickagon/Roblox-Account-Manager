@@ -17,11 +17,16 @@ function ps(script, env = {}) {
 /**
  * The command Windows runs for roblox-player: links. Respects Bloxstrap-style
  * launchers if the user installed one. Returns { exe, args } where args contains "%1".
+ * Cached for the session (a registry lookup per launch is pure latency) — the
+ * cache is dropped if the resolved exe disappears (e.g. Roblox updated).
  */
+let cachedHandler = null;
 async function getPlayerHandler() {
+  if (cachedHandler && fs.existsSync(cachedHandler.exe)) return cachedHandler;
+
   const out = await ps(`(Get-ItemProperty 'Registry::HKEY_CLASSES_ROOT\\roblox-player\\shell\\open\\command' -ErrorAction SilentlyContinue).'(default)'`);
   const m = out.match(/^"([^"]+)"\s*(.*)$/) || out.match(/^(\S+)\s*(.*)$/);
-  if (m && fs.existsSync(m[1])) return { exe: m[1], args: m[2] || '%1' };
+  if (m && fs.existsSync(m[1])) return (cachedHandler = { exe: m[1], args: m[2] || '%1' });
 
   // Fallback: newest RobloxPlayerBeta.exe in the standard install folder.
   const versions = path.join(process.env.LOCALAPPDATA || '', 'Roblox', 'Versions');
@@ -30,7 +35,7 @@ async function getPlayerHandler() {
       .map(d => path.join(versions, d, 'RobloxPlayerBeta.exe'))
       .filter(p => fs.existsSync(p))
       .sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs);
-    if (candidates[0]) return { exe: candidates[0], args: '%1' };
+    if (candidates[0]) return (cachedHandler = { exe: candidates[0], args: '%1' });
   }
   throw new Error('Roblox is not installed (no roblox-player handler found). Install Roblox from roblox.com first.');
 }
@@ -83,7 +88,12 @@ async function launchUri(uri) {
 
 /** Kills Roblox clients that were started for this browserTrackerId. */
 async function closeClientsFor(browserTrackerId) {
+  // Fast guard first: Get-Process is near-instant, Get-CimInstance Win32_Process
+  // (needed for the command line) is slow (~1s). If no Roblox is running there's
+  // nothing to close, so skip the CIM scan entirely — both in one spawn.
   const out = await ps(`
+$ProgressPreference='SilentlyContinue'
+if (-not (Get-Process RobloxPlayerBeta -ErrorAction SilentlyContinue)) { return }
 Get-CimInstance Win32_Process -Filter "Name='RobloxPlayerBeta.exe'" |
   Where-Object { $_.CommandLine -match ('(-b\\s+|browsertrackerid[:=])' + $env:TRACKER + '\\b') } |
   ForEach-Object { $_.ProcessId }`, { TRACKER: String(browserTrackerId) });
