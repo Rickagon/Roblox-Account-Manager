@@ -506,7 +506,7 @@ table.servers th, table.servers td { padding: 4px 6px; }
 .menu-wrap.split > button:not(.primary).arrow { border-left-color: var(--border); }
 
 /* ---------- controls moved into the right panel top ---------- */
-.side-top { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+.side-top { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
 .side-top .pill { font-size: 10.5px; }
 
 /* reorder drop indicator (below a row) */
