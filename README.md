@@ -61,23 +61,6 @@ No FPS unlock, no captcha-solving automation. You solve any captcha yourself.
 `%USERPROFILE%\.roblox-account-manager-v2\` - `accounts.dat` (encrypted), `settings.json`,
 and one browser profile per account under `profiles\`.
 
-## Anonymous usage data
-
-This app sends a small, **anonymous** usage ping when it starts. By using the
-app you agree to this. It is used only to count installs/active use and see
-which version people run.
-
-It sends **only**:
-
-- a random install ID (generated once, not tied to you or any account),
-- the app version,
-- your Windows version,
-- a rough bucket of how many accounts you have (e.g. `6-20`).
-
-It does **not** send - ever - your accounts, cookies, passwords, usernames,
-user IDs, game/server details, or anything that identifies you. Your accounts
-never leave your PC.
-
 ---
 
 ## Build from source (developers only)
