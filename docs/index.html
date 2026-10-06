@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Roblox Account Manager - Run Multiple Roblox Accounts at Once (Free)</title>
+<meta name="description" content="Free, open-source Roblox Account Manager for Windows. Run multiple Roblox accounts at once (multi-Roblox), launch them into any game, keep sessions logged in, and manage all your alts from one window. No install, accounts stay encrypted on your PC.">
+<meta name="keywords" content="roblox account manager, multi roblox, run multiple roblox accounts, roblox alt manager, roblox multi account, roblox multiple accounts at once, roblox account switcher, ram roblox">
+<link rel="canonical" href="https://rickagon.github.io/Roblox-Account-Manager/">
+
+<!-- Social link previews -->
+<meta property="og:type" content="website">
+<meta property="og:title" content="Roblox Account Manager - Run Multiple Roblox Accounts at Once">
+<meta property="og:description" content="Run your whole army of Roblox accounts from one window. Multi-Roblox, instant launching, encrypted and 100% on your PC. Free and open source.">
+<meta property="og:image" content="https://rickagon.github.io/Roblox-Account-Manager/screenshot.png">
+<meta property="og:url" content="https://rickagon.github.io/Roblox-Account-Manager/">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Roblox Account Manager - Run Multiple Roblox Accounts at Once">
+<meta name="twitter:description" content="Run your whole army of Roblox accounts from one window. Free and open source.">
+<meta name="twitter:image" content="https://rickagon.github.io/Roblox-Account-Manager/screenshot.png">
+
+<style>
+  :root{
+    --bg:#0b0d12; --panel:#141821; --panel2:#1b2130; --border:#262d3d;
+    --text:#e9ecf3; --muted:#9aa3b5; --accent:#5b8cff; --accent2:#8b5bff; --ok:#30c777;
+    --radius:14px;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:
+      radial-gradient(1200px 600px at 50% -10%, rgba(91,140,255,.18), transparent 60%),
+      radial-gradient(900px 500px at 90% 10%, rgba(139,91,255,.12), transparent 55%),
+      var(--bg);
+    color:var(--text);font:16px/1.6 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  a{color:inherit}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 20px}
+  .btn{display:inline-flex;align-items:center;gap:8px;padding:14px 26px;border-radius:999px;
+    font-weight:700;text-decoration:none;border:1px solid transparent;cursor:pointer;font-size:16px}
+  .btn-primary{background:linear-gradient(100deg,var(--accent),var(--accent2));color:#fff;
+    box-shadow:0 10px 30px rgba(91,140,255,.35)}
+  .btn-primary:hover{filter:brightness(1.08)}
+  .btn-ghost{background:transparent;border-color:var(--border);color:var(--text)}
+  .btn-ghost:hover{border-color:var(--accent)}
+
+  /* hero */
+  header{text-align:center;padding:90px 0 40px}
+  .eyebrow{color:var(--muted);font-weight:600;letter-spacing:.14em;text-transform:uppercase;font-size:12px}
+  h1{font-size:clamp(38px,7vw,68px);line-height:1.05;margin:14px 0 10px;font-weight:800;
+    background:linear-gradient(180deg,#fff,#b9c2da);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .tag{font-size:clamp(17px,2.4vw,22px);color:var(--muted);max-width:640px;margin:0 auto 10px}
+  .cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin:26px 0 10px}
+  .meta{color:var(--muted);font-size:14px;margin-top:8px}
+  .meta b{color:var(--text)}
+
+  /* shot */
+  .shot{margin:36px auto 0;max-width:900px;border-radius:var(--radius);overflow:hidden;
+    border:1px solid var(--border);box-shadow:0 30px 80px rgba(0,0,0,.5)}
+  .shot img{display:block;width:100%;height:auto}
+
+  section{padding:56px 0}
+  h2{font-size:clamp(26px,4vw,38px);margin:0 0 8px;font-weight:800}
+  .sub{color:var(--muted);margin:0 0 28px}
+
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  .card{background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--border);
+    border-radius:var(--radius);padding:20px}
+  .card .ico{font-size:26px}
+  .card h3{margin:10px 0 4px;font-size:17px}
+  .card p{margin:0;color:var(--muted);font-size:14px}
+
+  .steps{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;counter-reset:s}
+  .step{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:18px;position:relative}
+  .step::before{counter-increment:s;content:counter(s);display:grid;place-items:center;width:30px;height:30px;
+    border-radius:999px;background:linear-gradient(100deg,var(--accent),var(--accent2));color:#fff;font-weight:800;margin-bottom:10px}
+  .step p{margin:0;font-size:14px;color:var(--muted)}
+  .step b{color:var(--text)}
+
+  .faq details{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:4px 16px;margin-bottom:10px}
+  .faq summary{cursor:pointer;font-weight:700;padding:12px 0}
+  .faq p{color:var(--muted);margin:0 0 12px}
+
+  .final{text-align:center;background:linear-gradient(180deg,var(--panel),transparent);
+    border:1px solid var(--border);border-radius:20px;padding:50px 20px;margin:30px 0}
+  footer{text-align:center;color:var(--muted);padding:40px 0;border-top:1px solid var(--border);font-size:14px}
+  footer a{color:var(--accent);text-decoration:none}
+
+  @media(max-width:760px){.grid{grid-template-columns:1fr 1fr}.steps{grid-template-columns:1fr 1fr}}
+  @media(max-width:480px){.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<header class="wrap">
+  <div class="eyebrow">Free · Open Source · Windows</div>
+  <h1>Roblox Account Manager</h1>
+  <p class="tag">Run your whole army of Roblox accounts from one window. Multi-Roblox, instant launching, and you never get logged out again.</p>
+  <div class="cta">
+    <a class="btn btn-primary" id="download" href="https://github.com/Rickagon/Roblox-Account-Manager/releases/latest">⬇ Download for Windows</a>
+    <a class="btn btn-ghost" href="https://github.com/Rickagon/Roblox-Account-Manager">View on GitHub</a>
+  </div>
+  <div class="meta" id="relinfo">No installer. Download, unzip, double-click. Done.</div>
+
+  <div class="shot"><img src="screenshot.png" alt="Roblox Account Manager running multiple Roblox accounts at once"></div>
+</header>
+
+<section class="wrap">
+  <h2>Why people use it 🔥</h2>
+  <p class="sub">Everything you need to run a stack of accounts, nothing you don't.</p>
+  <div class="grid">
+    <div class="card"><div class="ico">🎮</div><h3>Multi-Roblox</h3><p>Run as many Roblox clients at once as your PC can handle. No tricks, no extra tabs.</p></div>
+    <div class="card"><div class="ico">🚀</div><h3>Launch anywhere</h3><p>Into any game, a specific server, a VIP/private link, or straight onto a friend.</p></div>
+    <div class="card"><div class="ico">🔄</div><h3>Never log out</h3><p>Automatic cookie refresh and a keep-alive so your sessions just stay alive.</p></div>
+    <div class="card"><div class="ico">🔒</div><h3>Encrypted and local</h3><p>Accounts are locked down with Windows-grade encryption and never leave your PC.</p></div>
+    <div class="card"><div class="ico">🪟</div><h3>Lives in your tray</h3><p>Holds the multi-Roblox lock all session and can boot on startup, out of your way.</p></div>
+    <div class="card"><div class="ico">🎨</div><h3>Make it yours</h3><p>Themes, aliases, groups, drag-select, right-click menus, and bulk account tools.</p></div>
+  </div>
+</section>
+
+<section class="wrap">
+  <h2>Up and running in seconds ⚡</h2>
+  <p class="sub">No command line. No nonsense.</p>
+  <div class="steps">
+    <div class="step"><p><b>Download</b> the latest release zip.</p></div>
+    <div class="step"><p><b>Unzip</b> it anywhere you like.</p></div>
+    <div class="step"><p><b>Double-click</b> the .exe.</p></div>
+    <div class="step"><p><b>Import</b> your accounts and go.</p></div>
+  </div>
+</section>
+
+<section class="wrap faq">
+  <h2>FAQ</h2>
+  <details><summary>Is it free?</summary><p>Yes. Completely free and open source under the MIT license.</p></details>
+  <details><summary>Is it safe? Where do my accounts go?</summary><p>Your accounts never leave your PC. They are stored encrypted on your own machine. The app is open source so anyone can read exactly what it does.</p></details>
+  <details><summary>How do I run multiple Roblox accounts at once?</summary><p>Add your accounts, turn on Multi-Roblox, and launch as many as you want. Each one opens as its own Roblox client.</p></details>
+  <details><summary>Does it work on Mac?</summary><p>Windows only for now. The core features rely on Windows, so there is no Mac build.</p></details>
+  <details><summary>Can I bring over accounts from the old manager?</summary><p>Yes. Use Import from RAM to load an existing AccountData.json, or paste cookies / user:pass lines.</p></details>
+</section>
+
+<div class="wrap">
+  <div class="final">
+    <h2>Ready to run them all?</h2>
+    <p class="sub">Free. Open source. Updates itself.</p>
+    <a class="btn btn-primary" href="https://github.com/Rickagon/Roblox-Account-Manager/releases/latest">⬇ Download Roblox Account Manager</a>
+  </div>
+</div>
+
+<footer>
+  <div class="wrap">
+    Roblox Account Manager · <a href="https://github.com/Rickagon/Roblox-Account-Manager">GitHub</a> ·
+    <a href="https://github.com/Rickagon/Roblox-Account-Manager/releases/latest">Download</a> ·
+    MIT License<br>
+    Not affiliated with or endorsed by Roblox Corporation.
+  </div>
+</footer>
+
+<!-- Structured data for Google -->
+<script type="application/ld+json">
+{
+  "@context":"https://schema.org",
+  "@type":"SoftwareApplication",
+  "name":"Roblox Account Manager",
+  "operatingSystem":"Windows",
+  "applicationCategory":"UtilitiesApplication",
+  "offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},
+  "description":"Free open-source tool to run multiple Roblox accounts at once (multi-Roblox), launch them into games, and keep sessions logged in. Accounts stay encrypted on your PC.",
+  "downloadUrl":"https://github.com/Rickagon/Roblox-Account-Manager/releases/latest",
+  "url":"https://rickagon.github.io/Roblox-Account-Manager/"
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context":"https://schema.org",
+  "@type":"FAQPage",
+  "mainEntity":[
+    {"@type":"Question","name":"Is Roblox Account Manager free?","acceptedAnswer":{"@type":"Answer","text":"Yes. It is completely free and open source under the MIT license."}},
+    {"@type":"Question","name":"How do I run multiple Roblox accounts at once?","acceptedAnswer":{"@type":"Answer","text":"Add your accounts, enable Multi-Roblox, and launch as many as you want. Each opens as its own Roblox client."}},
+    {"@type":"Question","name":"Does Roblox Account Manager work on Mac?","acceptedAnswer":{"@type":"Answer","text":"It is Windows only. The core features rely on Windows, so there is no Mac build."}}
+  ]
+}
+</script>
+
+<!-- Live version + download count from GitHub (optional, degrades gracefully) -->
+<script>
+(async () => {
+  try {
+    const r = await fetch('https://api.github.com/repos/Rickagon/Roblox-Account-Manager/releases/latest');
+    const rel = await r.json();
+    const asset = (rel.assets||[]).find(a => /\.zip$/i.test(a.name));
+    if (asset) document.getElementById('download').href = asset.browser_download_url;
+    const v = (rel.tag_name||'').replace(/^v/,'');
+    const dl = (rel.assets||[]).reduce((s,a)=>s+(a.download_count||0),0);
+    if (v) document.getElementById('relinfo').innerHTML =
+      `Latest: <b>v${v}</b> &nbsp;·&nbsp; No installer. Download, unzip, double-click.`;
+  } catch {}
+})();
+</script>
+
+</body>
+</html>

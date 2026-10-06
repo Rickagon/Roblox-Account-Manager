@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://rickagon.github.io/Roblox-Account-Manager/sitemap.xml
