@@ -1,81 +1,77 @@
-# Roblox Account Manager (V2)
+# 🚀 Roblox Account Manager
 
 ![platform](https://img.shields.io/badge/platform-Windows-0a7bbb)
-![electron](https://img.shields.io/badge/built%20with-Electron-2b2e3b)
 [![latest release](https://img.shields.io/github/v/release/Rickagon/Roblox-Account-Manager)](https://github.com/Rickagon/Roblox-Account-Manager/releases/latest)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-A modern Roblox account manager built in Electron + Node. Manage many Roblox
-accounts, launch them into games, run several clients at once, and keep
-sessions alive.
+**Run your whole army of Roblox accounts from one window.** Launch them into any
+game, fire up a dozen clients at once, and never get logged out again. Built for
+people who are *done* juggling browser tabs.
 
-> This repo contains **only the app code** - no accounts, cookies or passwords.
-> Your accounts are stored, encrypted, in `%USERPROFILE%\.roblox-account-manager-v2`
-> on the machine you run it on, and never in this project.
+> 🔒 **Your accounts never leave your PC. Period.** This repo is just the app:
+> no accounts, no cookies, no passwords. It all lives encrypted on *your*
+> machine and stays there.
 
-## Screenshots
+## 📸 Look at it
 
-<!-- Drop a screenshot at docs/screenshot.png (tip: turn on "Hide Usernames"
-     first so no account names are shown) and it will appear here. -->
 ![Roblox Account Manager](docs/screenshot.png)
 
-## Download & run (no terminal, no Node)
+## ⬇️ Get it running (zero setup)
 
-1. Go to the **[latest release](https://github.com/Rickagon/Roblox-Account-Manager/releases/latest)**.
+1. Grab the **[latest release](https://github.com/Rickagon/Roblox-Account-Manager/releases/latest)**.
 2. Download **`RobloxAccountManager-win-x64.zip`**.
-3. **Unzip it** anywhere (e.g. your Desktop). Keep the whole folder together.
-4. Open the folder and double-click **`Roblox Account Manager.exe`**.
+3. Unzip it anywhere. Keep the whole folder together.
+4. Double-click **`Roblox Account Manager.exe`**. Done.
 
-That's it - no install, no command line. To keep it handy, right-click the .exe →
-**Send to → Desktop (create shortcut)**, or **Pin to taskbar**.
+No installer. No command line. No nonsense. Right-click the .exe and
+**Pin to taskbar** so it's always a click away.
 
-> Windows SmartScreen may show "Windows protected your PC" because the app isn't
-> code-signed. Click **More info → Run anyway**. It's an unsigned Electron app, not
-> malware - scan it with Windows Defender if you want to be sure.
+> Windows might throw a "protected your PC" popup. That's just because the app
+> isn't code-signed (that costs money). Hit **More info → Run anyway**. Scan it
+> with Windows Defender if you want the peace of mind.
 
-## First-time setup
+## ⚡ Load your accounts in
 
-- **Add Account ▾ → Import from RAM** to bring in your accounts from a
-  `AccountData.json` file. No password needed - it's protected by your Windows login.
-- Or **Add Account** (manual login), **Auto login** (paste `user:pass` lines), or
-  **Login with cookie(s)**.
+- **Import from RAM** - drop in your old `AccountData.json` and they all show up.
+- **Auto login** - paste `user:pass` lines and let it do the work.
+- **Cookies** - paste `.ROBLOSECURITY` cookies. No captcha, ever.
+- **Manual** - sign in once in a browser window.
 
-## Features
+## 🔥 What it does
 
-- Encrypted local account vault (Windows DPAPI)
-- Launch into a place, a specific server, a VIP/private link, or follow a user
-- Multi-Roblox (run several clients at once), with a max-clients limit
-- Stays in the system tray so it holds the Multi-Roblox lock all session; option to
-  start hidden at Windows startup
-- Automatic cookie refresh + a scheduled keep-alive so sessions don't expire
-- Account browser per account (your installed Chrome/Edge, one profile each)
-- Alias, groups, drag-select, right-click menu, Account Utilities (display name,
-  password, privacy, summary)
+- 🎮 **Multi-Roblox** - run as many clients at once as your PC can handle.
+- 🚀 **Launch anywhere** - a game, a specific server, a VIP/private link, or follow a friend.
+- 🔄 **Never log out** - automatic cookie refresh + a scheduled keep-alive.
+- 🔒 **Encrypted vault** - every account locked down with Windows-grade encryption.
+- 🪟 **Lives in your tray** - holds the Multi-Roblox lock all session, can boot on startup.
+- 🎨 **Make it yours** - themes, aliases, groups, drag-select, right-click menus, bulk tools.
+- 🖥️ **Per-account browsers** - each account gets its own profile in your Chrome/Edge.
 
-## Data location
+## 🗂️ Where your stuff lives
 
-`%USERPROFILE%\.roblox-account-manager-v2\` - `accounts.dat` (encrypted), `settings.json`,
-and one browser profile per account under `profiles\`.
+Everything sits in `%USERPROFILE%\.roblox-account-manager-v2\`: the encrypted
+vault, your settings, and a browser profile per account. All local. All yours.
 
 ---
 
-## Build from source (developers only)
+<details>
+<summary>🛠️ Building from source (for the nerds)</summary>
 
-End users do **not** need this - use the release zip above. To run or rebuild from
-source you need [Node.js](https://nodejs.org) (v18 or newer):
+You do **not** need this to use the app - just grab the release zip above.
+To build it yourself you need [Node.js](https://nodejs.org) 18+:
 
 ```bash
 git clone <your-repo-url>
 cd Roblox-Account-Manager
 npm install
-npm start          # run in dev
-npm run pack       # build the standalone .exe into dist/
+npm start        # run in dev
+npm run pack     # build the standalone .exe into dist/
 ```
 
-The packaged app appears in
-`dist\Roblox Account Manager-win32-x64\Roblox Account Manager.exe`.
+The packaged app lands in `dist\Roblox Account Manager-win32-x64\`.
+
+</details>
 
 ## License
 
-[MIT](LICENSE)
-
+[MIT](LICENSE) - do whatever you want with it.
