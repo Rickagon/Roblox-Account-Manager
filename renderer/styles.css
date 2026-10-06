@@ -506,8 +506,10 @@ table.servers th, table.servers td { padding: 4px 6px; }
 .menu-wrap.split > button:not(.primary).arrow { border-left-color: var(--border); }
 
 /* ---------- controls moved into the right panel top ---------- */
-.side-top { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; }
-.side-top .pill { font-size: 10.5px; }
+.side-top { display: flex; flex-direction: column; align-items: stretch; gap: 7px; margin-bottom: 8px; }
+.side-top .pill { font-size: 10.5px; align-self: flex-start; }
+.side-actions { display: flex; gap: 6px; }
+.side-actions button { flex: 1; white-space: nowrap; }
 
 /* reorder drop indicator (below a row) */
 .trow.drop-below { box-shadow: inset 0 -2px 0 var(--accent); }
