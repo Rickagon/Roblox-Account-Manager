@@ -52,10 +52,6 @@ That's it - no install, no command line. To keep it handy, right-click the .exe 
 - Alias, groups, drag-select, right-click menu, Account Utilities (display name,
   password, privacy, summary)
 
-## What it does NOT do
-
-No FPS unlock, no captcha-solving automation. You solve any captcha yourself.
-
 ## Data location
 
 `%USERPROFILE%\.roblox-account-manager-v2\` - `accounts.dat` (encrypted), `settings.json`,
