@@ -6,6 +6,7 @@ const { RobloxClient } = require('./src/roblox');
 const { readRamFile } = require('./src/ramImport');
 const browser = require('./src/browser');
 const launcher = require('./src/launcher');
+const telemetry = require('./src/telemetry');
 
 // Keep data OUT of AppData: sandboxed launchers (MSIX-packaged apps) silently
 // redirect AppData writes into their own container, which made different
@@ -1129,6 +1130,9 @@ if (!gotLock) {
       keepAlive(false);
       if (vault.accounts.some(a => !a.avatarUrl)) refreshAvatars();
       if (app.isPackaged) setTimeout(() => checkForUpdate(false), 3000); // quiet auto-check on startup
+      // Anonymous usage ping (see src/telemetry.js and the README). Never sends
+      // accounts, cookies, passwords, or any identifying data.
+      telemetry.report(DATA_DIR, { version: app.getVersion(), accountCount: vault.accounts.length }).catch(() => {});
     });
   });
 
