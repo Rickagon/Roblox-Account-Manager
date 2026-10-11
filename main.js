@@ -915,8 +915,10 @@ function registerIpc() {
       const max = Math.max(1, settings.maxActiveClients || 20);
       for (let i = 0; i < accounts.length; i++) {
         if (joinCancel) { log('Launch queue stopped.'); break; }
-        // Cap how many Roblox clients run at once.
-        for (let waited = 0; (await launcher.countRobloxClients().catch(() => 0)) >= max; waited += 1.5) {
+        // Cap how many Roblox clients run at once. Count EVERY Roblox process,
+        // not just ones with a window yet - otherwise clients still loading (no
+        // window) don't count and the app blows past the limit (e.g. 51 at once).
+        for (let waited = 0; (await launcher.listRobloxProcesses().catch(() => [])).length >= max; waited += 1.5) {
           if (joinCancel) break;
           if (waited === 0) log(`Reached the ${max}-client limit - close a Roblox window to launch ${accounts[i].username}`);
           if (waited >= 120) { log(`Still at the ${max}-client limit after 2 min; stopping.`, 'error'); joinCancel = true; break; }
