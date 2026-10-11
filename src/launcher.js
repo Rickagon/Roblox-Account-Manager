@@ -120,11 +120,34 @@ async function countRobloxClients() {
  * younger than minAgeSec so ones still loading (no window yet) aren't killed.
  * Returns how many it killed.
  */
-/** All RobloxPlayerBeta processes -> [{ pid, hasWindow }]. */
+/**
+ * All RobloxPlayerBeta processes -> [{ pid, hasWindow }]. hasWindow means the
+ * process has a VISIBLE top-level window right now - not just a MainWindowHandle,
+ * which Roblox keeps set even after you close the window and it drops to the
+ * background. Using real visible windows lets the watchdog spot backgrounded
+ * clients and close them.
+ */
 async function listRobloxProcesses() {
   const out = await ps(`
 $ProgressPreference='SilentlyContinue'
-Get-Process RobloxPlayerBeta -ErrorAction SilentlyContinue | ForEach-Object { "{0}\`t{1}" -f $_.Id, ([int]($_.MainWindowHandle -ne 0)) }`);
+Add-Type @"
+using System;using System.Runtime.InteropServices;
+public class RamLP {
+ [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindowsProc cb, IntPtr l);
+ [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
+ [DllImport("user32.dll")] public static extern int GetWindowThreadProcessId(IntPtr h, out int pid);
+ public delegate bool EnumWindowsProc(IntPtr h, IntPtr l);
+}
+"@ -ErrorAction SilentlyContinue
+$vis = @{}
+$cb = [RamLP+EnumWindowsProc]{ param($h,$l)
+  if ([RamLP]::IsWindowVisible($h)) { $procId = 0; [RamLP]::GetWindowThreadProcessId($h, [ref]$procId) | Out-Null; $vis[[int]$procId] = $true }
+  return $true
+}
+[RamLP]::EnumWindows($cb, [IntPtr]::Zero) | Out-Null
+$out = New-Object System.Collections.ArrayList
+Get-Process RobloxPlayerBeta -ErrorAction SilentlyContinue | ForEach-Object { $has = 0; if ($vis.ContainsKey([int]$_.Id)) { $has = 1 }; [void]$out.Add(("{0}\`t{1}" -f $_.Id, $has)) }
+$out -join "\`n"`);
   return String(out).split('\n').map(l => l.trim()).filter(Boolean).map(l => {
     const [pid, w] = l.split('\t');
     return { pid, hasWindow: w === '1' };
