@@ -273,15 +273,17 @@ async function pollPresence() {
 let zombieTimer;
 const seenWithWindow = new Set();   // pids that have had a game window at some point
 const windowlessSince = new Map();  // pid -> when it went windowless after having a window
+const noWindowSince = new Map();    // pid -> first seen with NO window ever (stuck background instance)
 function restartTimers() {
   clearInterval(presenceTimer);
   clearInterval(keepAliveTimer);
   clearInterval(zombieTimer);
   presenceTimer = setInterval(pollPresence, Math.max(3, settings.presenceIntervalSec) * 1000);
   keepAliveTimer = setInterval(() => keepAlive(false), 60 * 60 * 1000);
-  // Clean up ONLY clients that had a game window and then lost it (you closed
-  // them) but whose process kept running. Clients still loading (never had a
-  // window) and in-game clients are never touched.
+  // Clean up two kinds of leftover clients: ones that had a game window and
+  // then lost it (you closed them) but whose process kept running (20s grace),
+  // and stuck background instances that never opened a window at all (2.5 min
+  // grace, so normal loading is never touched). In-game clients are left alone.
   if (settings.killClosedClients !== false) {
     zombieTimer = setInterval(async () => {
       try {
@@ -289,17 +291,25 @@ function restartTimers() {
         const alive = new Set(procs.map(p => p.pid));
         for (const pid of [...seenWithWindow]) if (!alive.has(pid)) seenWithWindow.delete(pid);
         for (const pid of [...windowlessSince.keys()]) if (!alive.has(pid)) windowlessSince.delete(pid);
+        for (const pid of [...noWindowSince.keys()]) if (!alive.has(pid)) noWindowSince.delete(pid);
         const now = Date.now();
         const kill = [];
         for (const p of procs) {
-          if (p.hasWindow) { seenWithWindow.add(p.pid); windowlessSince.delete(p.pid); continue; }
-          if (!seenWithWindow.has(p.pid)) continue; // never had a window -> loading/tray, leave it
-          if (!windowlessSince.has(p.pid)) windowlessSince.set(p.pid, now);
-          else if (now - windowlessSince.get(p.pid) >= 20000) kill.push(p.pid); // window gone 20s+
+          if (p.hasWindow) { seenWithWindow.add(p.pid); windowlessSince.delete(p.pid); noWindowSince.delete(p.pid); continue; }
+          if (seenWithWindow.has(p.pid)) {
+            // Had a game window, now gone (X'd out) but the process lingered.
+            if (!windowlessSince.has(p.pid)) windowlessSince.set(p.pid, now);
+            else if (now - windowlessSince.get(p.pid) >= 20000) kill.push(p.pid); // window gone 20s+
+          } else {
+            // Never opened a window. Give it time to load; if it never shows one,
+            // it's a stuck background instance eating resources -> close it.
+            if (!noWindowSince.has(p.pid)) noWindowSince.set(p.pid, now);
+            else if (now - noWindowSince.get(p.pid) >= 150000) kill.push(p.pid); // 2.5 min, never windowed
+          }
         }
         if (kill.length) {
           await launcher.killProcesses(kill);
-          kill.forEach(pid => { seenWithWindow.delete(pid); windowlessSince.delete(pid); });
+          kill.forEach(pid => { seenWithWindow.delete(pid); windowlessSince.delete(pid); noWindowSince.delete(pid); });
           log(`Closed ${kill.length} leftover Roblox client${kill.length > 1 ? 's' : ''} that didn't exit`);
         }
       } catch { /* transient */ }
