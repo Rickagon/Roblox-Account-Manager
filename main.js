@@ -715,6 +715,9 @@ function registerIpc() {
     }
     pushAccounts();
     refreshAvatars();
+    // Fetch the online status of the just-added accounts so their dots show
+    // right away instead of waiting for a manual "Check sessions". Non-blocking.
+    if (added) for (const d of [300, 4000]) setTimeout(pollPresence, d);
     return { added, total: lines.length };
   });
 
@@ -772,6 +775,7 @@ function registerIpc() {
     };
     await Promise.all(slots.map(worker));
     refreshAvatars();
+    if (added) for (const d of [300, 4000]) setTimeout(pollPresence, d);
     return { added, total: creds.length };
   });
 
