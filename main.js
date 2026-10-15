@@ -111,6 +111,18 @@ function log(msg, level = 'info') {
   (level === 'error' ? console.error : console.log)(msg);
 }
 
+// Ask the renderer for a 2-step verification code (one clean prompt, like the
+// rest of the UI) and wait for the answer. Resolves null if cancelled/timed out.
+const pending2fa = new Map();
+function ask2fa(username) {
+  return new Promise(resolve => {
+    const reqId = require('crypto').randomUUID();
+    pending2fa.set(reqId, resolve);
+    send('ask2fa', { reqId, username });
+    setTimeout(() => { const r = pending2fa.get(reqId); if (r) { pending2fa.delete(reqId); r(null); } }, 180000);
+  });
+}
+
 // ---------- Roblox clients with cookie rotation ----------
 
 function clientFor(acc) {
@@ -784,11 +796,16 @@ function registerIpc() {
     return clientFor(acc).getSummary(acc.userId);
   });
 
+  handle('2fa:answer', ({ reqId, code }) => {
+    const r = pending2fa.get(reqId);
+    if (r) { pending2fa.delete(reqId); r(code || null); }
+  });
+
   handle('account:setDisplayName', async (ids, name) => {
     let ok = 0;
     for (const id of ids) {
       const acc = vault.get(id);
-      try { await clientFor(acc).setDisplayName(acc.userId, name); vault.update(id, { displayName: name }); ok++; log(`${acc.username}: display name set`); }
+      try { await clientFor(acc).setDisplayName(acc.userId, name, () => ask2fa(acc.username)); vault.update(id, { displayName: name }); ok++; log(`${acc.username}: display name set`); }
       catch (e) { log(`${acc.username}: ${e.message}`, 'error'); }
     }
     pushAccounts();
@@ -803,7 +820,7 @@ function registerIpc() {
       const cur = current || acc.password;
       if (!cur) { log(`${acc.username}: no current password known, skipped`, 'error'); continue; }
       try {
-        await clientFor(acc).changePassword(cur, next);
+        await clientFor(acc).changePassword(cur, next, () => ask2fa(acc.username));
         vault.update(id, { password: next }); // Roblox rotates the cookie; the client already captured it.
         ok++;
         log(`${acc.username}: password changed`);
@@ -816,7 +833,7 @@ function registerIpc() {
   handle('account:setJoinPrivacy', async (ids, value) => {
     for (const id of ids) {
       const acc = vault.get(id);
-      try { await clientFor(acc).setJoinPrivacy(value); log(`${acc.username}: join privacy set to ${value}`); }
+      try { await clientFor(acc).setJoinPrivacy(value, () => ask2fa(acc.username)); log(`${acc.username}: join privacy set to ${value}`); }
       catch (e) { log(`${acc.username}: ${e.message}`, 'error'); }
     }
     return true;

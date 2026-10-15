@@ -902,6 +902,10 @@ window.ram.onAccounts(list => {
 window.ram.onPresence(p => { state.presence = p; if (!isDragging) applyPresence(); });
 window.ram.onLog(({ msg, level }) => log(msg, level === 'error' ? 'error' : 'info'));
 window.ram.onMultiRoblox(active => { state.multiRobloxActive = active; updateMultiStatus(); });
+window.ram.onAsk2fa(async ({ reqId, username }) => {
+  const code = await prompt(`2-step verification code for ${username}`, '', 'text');
+  window.ram.answer2fa(reqId, code);
+});
 window.ram.onUpdate(info => {
   const banner = $('#update-banner');
   if (info.upToDate) { log(`You're on the latest version (v${info.version})`); return; }

@@ -53,4 +53,6 @@ contextBridge.exposeInMainWorld('ram', {
   onJoining: fn => on('joining', fn),
   onMultiRoblox: fn => on('multiRoblox', fn),
   onUpdate: fn => on('update', fn),
+  onAsk2fa: fn => on('ask2fa', fn),
+  answer2fa: (reqId, code) => call('2fa:answer', { reqId, code }),
 });

@@ -71,6 +71,70 @@ class RobloxClient {
     return data;
   }
 
+  // ---- 2-step verification (2SV) challenges ----
+  // A sensitive action (change password, display name, ...) on a 2SV-protected
+  // account comes back as a 403 carrying rblx-challenge-* headers instead of
+  // failing. We read the challenge, ask the caller for the code, verify it, and
+  // hand back the headers to replay the original request with.
+
+  _challenge(res) {
+    const id = res.headers.get('rblx-challenge-id');
+    const type = res.headers.get('rblx-challenge-type');
+    const metadata = res.headers.get('rblx-challenge-metadata');
+    if (res.status === 403 && id && metadata && type === 'twostepverification') return { id, metadata };
+    return null;
+  }
+
+  /**
+   * Solve a 2SV challenge. getCode() -> Promise<string|null> (the authenticator
+   * / email code the user types). Returns headers to resend with the original
+   * request, or null if the user cancelled. Throws on a wrong/expired code.
+   */
+  async solveTwoStep(challengeId, metadataB64, getCode) {
+    const meta = JSON.parse(Buffer.from(metadataB64, 'base64').toString('utf8'));
+    const code = (await getCode())?.trim();
+    if (!code) return null;
+    // 1) verify the code -> a one-time verification token
+    const verify = await this.json(
+      `https://twostepverification.roblox.com/v1/users/${meta.userId}/challenges/${meta.challengeId}/verify`,
+      { method: 'POST', body: { actionType: 'Generic', challengeId: meta.challengeId, code } },
+    );
+    const token = verify?.verificationToken;
+    if (!token) throw new Error('2-step code was not accepted');
+    // 2) continue the generic challenge with that token
+    const challengeMetadata = JSON.stringify({ rememberDevice: false, actionType: 'Generic', challengeId: meta.challengeId, verificationToken: token });
+    await this.request('https://apis.roblox.com/challenge/v1/continue', {
+      method: 'POST',
+      body: { challengeId, challengeType: 'twostepverification', challengeMetadata },
+    });
+    // 3) headers to replay the original request, now authorised
+    return {
+      'rblx-challenge-id': challengeId,
+      'rblx-challenge-type': 'twostepverification',
+      'rblx-challenge-metadata': Buffer.from(challengeMetadata, 'utf8').toString('base64'),
+    };
+  }
+
+  /** Like json(), but if the request hits a 2SV challenge it prompts via getCode and retries. */
+  async jsonWithChallenge(url, opts = {}, getCode) {
+    let res = await this.request(url, opts);
+    const ch = this._challenge(res);
+    if (ch && getCode) {
+      const hdrs = await this.solveTwoStep(ch.id, ch.metadata, getCode);
+      if (hdrs) res = await this.request(url, { ...opts, headers: { ...(opts.headers || {}), ...hdrs } });
+    }
+    const text = await res.text();
+    let data = null;
+    try { data = text ? JSON.parse(text) : null; } catch { /* non-JSON */ }
+    if (!res.ok) {
+      const msg = data?.errors?.[0]?.message || text.slice(0, 200) || res.statusText;
+      const err = new Error(`${res.status} ${msg}`);
+      err.status = res.status;
+      throw err;
+    }
+    return data;
+  }
+
   // ---- account ----
 
   /** Returns { id, name, displayName } or throws with status 401 if the cookie is dead. */
@@ -93,19 +157,22 @@ class RobloxClient {
     return { robux, friends, followers, created: info?.created, description: info?.description, displayName: info?.displayName };
   }
 
-  async setDisplayName(userId, name) {
-    await this.json(`https://users.roblox.com/v1/users/${userId}/display-names`, {
+  async setDisplayName(userId, name, getCode) {
+    await this.jsonWithChallenge(`https://users.roblox.com/v1/users/${userId}/display-names`, {
       method: 'PATCH',
       body: { newDisplayName: name },
-    });
+    }, getCode);
     return true;
   }
 
-  async changePassword(currentPassword, newPassword) {
-    const res = await this.request('https://auth.roblox.com/v2/user/passwords/change', {
-      method: 'POST',
-      body: { currentPassword, newPassword },
-    });
+  async changePassword(currentPassword, newPassword, getCode) {
+    const opts = { method: 'POST', body: { currentPassword, newPassword } };
+    let res = await this.request('https://auth.roblox.com/v2/user/passwords/change', opts);
+    const ch = this._challenge(res);
+    if (ch && getCode) {
+      const hdrs = await this.solveTwoStep(ch.id, ch.metadata, getCode);
+      if (hdrs) res = await this.request('https://auth.roblox.com/v2/user/passwords/change', { ...opts, headers: hdrs });
+    }
     if (res.status === 200) return true;
     const text = await res.text().catch(() => '');
     let msg = text;
@@ -114,11 +181,11 @@ class RobloxClient {
   }
 
   /** Who can join me in experiences: 'AllUsers' | 'Following' | 'Friends' | 'NoOne'. */
-  async setJoinPrivacy(value) {
-    await this.json('https://apis.roblox.com/user-settings-api/v1/user-settings', {
+  async setJoinPrivacy(value, getCode) {
+    await this.jsonWithChallenge('https://apis.roblox.com/user-settings-api/v1/user-settings', {
       method: 'POST',
       body: { whoCanJoinMeInExperiences: value },
-    });
+    }, getCode);
     return true;
   }
 
