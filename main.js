@@ -441,9 +441,26 @@ async function joinWith(acc, opts) {
   if (closed) log(`${acc.username}: closed previous client`);
 
   launch.ticket = await ticketP; // re-throws here if the ticket fetch failed
+  const before = (await launcher.listRobloxProcesses().catch(() => [])).length;
   await launcher.launchUri(launcher.buildLaunchUri(launch));
   vault.update(acc.id, { lastUse: new Date().toISOString() });
   log(`${acc.username}: launching`);
+
+  // Confirm the client actually opened. If Roblox is already running without the
+  // app holding the Multi-Roblox lock, the new client crashes in its
+  // single-instance guard (it never opens) - detect that and say so, instead of
+  // leaving "launching" on screen forever. Launches are sequential, so no other
+  // launch inflates the count during this window.
+  let opened = false;
+  for (let t = 0; t < 9000 && !joinCancel; t += 1000) {
+    await new Promise(r => setTimeout(r, 1000));
+    if ((await launcher.listRobloxProcesses().catch(() => [])).length > before) { opened = true; break; }
+  }
+  if (!opened && !joinCancel) {
+    const err = new Error('Roblox closed on launch (it was already running without Multi-Roblox). Click "Stop & Close All", make sure the Multi-Roblox pill is ON, then launch again.');
+    err.launchCrash = true;
+    throw err;
+  }
 
   if (settings.labelWindows !== false) startWindowLabeler();
 }
@@ -961,6 +978,9 @@ function registerIpc() {
         } catch (e) {
           log(`${accounts[i].username}: ${e.message}`, 'error');
           if (e.status === 401) { vault.update(accounts[i].id, { valid: false }); pushAccounts(); }
+          // A single-instance crash will hit every remaining account too - stop
+          // the batch so the user isn't spammed, and point them at the one fix.
+          if (e.launchCrash) { joinCancel = true; log('Stopped the queue. Hit Stop & Close All, confirm Multi-Roblox is ON (green), then launch again.', 'error'); }
         }
         if (i < accounts.length - 1) {
           // Interruptible delay between accounts so Stop takes effect promptly.
