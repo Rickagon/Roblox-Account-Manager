@@ -142,6 +142,11 @@ class RobloxClient {
     return this.json('https://users.roblox.com/v1/users/authenticated');
   }
 
+  /** Public user lookup by id (no auth needed) - used to name a locked account. */
+  getUserById(id) {
+    return this.json(`https://users.roblox.com/v1/users/${id}`);
+  }
+
   async getRobux(userId) {
     const d = await this.json(`https://economy.roblox.com/v1/users/${userId}/currency`);
     return d?.robux ?? 0;

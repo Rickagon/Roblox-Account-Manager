@@ -208,6 +208,7 @@ async function login(profilesRoot, { username = '', password = '', window: win }
 
   return new Promise(resolve => {
     let done = false;
+    let tries = 0;
     const finish = result => {
       if (done) return;
       done = true;
@@ -219,18 +220,58 @@ async function login(profilesRoot, { username = '', password = '', window: win }
     const timer = setInterval(async () => {
       const cookie = await readRobloxCookie(ctx);
       if (!cookie) return;
+      tries++;
+      const pw = capturedPassword || password;
       try {
         const user = await new RobloxClient(cookie).getAuthenticatedUser();
-        if (!user?.id) return;
-        clearInterval(timer);
-        const pw = capturedPassword || password;
-        // Resolve BEFORE closing: ctx.close() fires the 'close' handler, whose
-        // finish(null) would otherwise win the race and discard this login.
-        finish({ cookie, password: pw, user, profileDir });
-        await ctx.close().catch(() => {});
-      } catch { /* cookie not fully valid yet (e.g. 2-step pending) */ }
+        if (user?.id) {
+          clearInterval(timer);
+          // Resolve BEFORE closing: ctx.close() fires the 'close' handler, whose
+          // finish(null) would otherwise win the race and discard this login.
+          finish({ cookie, password: pw, user, profileDir });
+          await ctx.close().catch(() => {});
+          return;
+        }
+      } catch { /* cookie not fully valid yet (2-step pending, or account locked) */ }
+      // After a few tries the cookie is set but /authenticated still fails - the
+      // account is probably LOCKED (never reaches the home page). Identify it from
+      // the logged-in page so it still gets added (flagged), not silently lost.
+      if (tries >= 4) {
+        const who = await identifyFromPage(ctx).catch(() => null);
+        if (who?.id) {
+          clearInterval(timer);
+          finish({ cookie, password: pw, user: who, profileDir, locked: true });
+          await ctx.close().catch(() => {});
+        }
+      }
     }, 1500);
   });
+}
+
+// Pull the signed-in user's id/name straight from the Roblox page (works even
+// when the account is locked and the API's /authenticated call is refused).
+async function identifyFromPage(ctx) {
+  const page = ctx.pages()[0];
+  if (!page) return null;
+  const data = await page.evaluate(() => {
+    try {
+      const u = (window.Roblox && window.Roblox.CurrentUser) || {};
+      const meta = document.querySelector('meta[name="user-data"]');
+      const id = u.userId || (meta && meta.getAttribute('data-userid'));
+      const name = u.name || u.userName || (meta && meta.getAttribute('data-name'));
+      return id ? { id: Number(id), name: name || '' } : null;
+    } catch { return null; }
+  }).catch(() => null);
+  if (!data?.id) return null;
+  let displayName = data.name;
+  if (!data.name) {
+    try {
+      const info = await new RobloxClient('').getUserById(data.id);
+      data.name = info?.name || `User ${data.id}`;
+      displayName = info?.displayName || data.name;
+    } catch { data.name = `User ${data.id}`; }
+  }
+  return { id: data.id, name: data.name, displayName };
 }
 
 /**

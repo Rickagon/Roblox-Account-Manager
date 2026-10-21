@@ -640,11 +640,11 @@ function registerIpc() {
       cookie: r.cookie,
       password: r.password,
       profileDir: r.profileDir,
-      valid: true,
+      valid: !r.locked,
       cookieUpdatedAt: new Date().toISOString(),
       lastChecked: new Date().toISOString(),
     });
-    log(`Added ${acc.username}`);
+    log(r.locked ? `Added ${acc.username} (account is LOCKED - unlock it on roblox.com, then Check sessions)` : `Added ${acc.username}`, r.locked ? 'error' : 'info');
     pushAccounts();
     refreshAvatars();
     return publicAccount(acc);
@@ -656,8 +656,8 @@ function registerIpc() {
     const r = await browser.login(PROFILES_DIR, { username: acc.username, password: acc.password });
     if (!r) return null;
     if (r.user.id !== acc.userId) throw new Error(`You logged in as ${r.user.name}, not ${acc.username}. Nothing was changed.`);
-    vault.update(id, { cookie: r.cookie, password: r.password || acc.password, profileDir: r.profileDir, valid: true, cookieUpdatedAt: new Date().toISOString(), lastChecked: new Date().toISOString() });
-    log(`${acc.username}: logged in again`);
+    vault.update(id, { cookie: r.cookie, password: r.password || acc.password, profileDir: r.profileDir, valid: !r.locked, cookieUpdatedAt: new Date().toISOString(), lastChecked: new Date().toISOString() });
+    log(r.locked ? `${acc.username}: logged in but the account is LOCKED - unlock it on roblox.com` : `${acc.username}: logged in again`, r.locked ? 'error' : 'info');
     pushAccounts();
     return true;
   });
@@ -793,11 +793,11 @@ function registerIpc() {
           if (!r) { log(`${username || 'Login'} window closed, skipped`); continue; }
           vault.upsert({
             userId: r.user.id, username: r.user.name, displayName: r.user.displayName,
-            cookie: r.cookie, password: r.password, profileDir: r.profileDir, valid: true,
+            cookie: r.cookie, password: r.password, profileDir: r.profileDir, valid: !r.locked,
             cookieUpdatedAt: new Date().toISOString(), lastChecked: new Date().toISOString(),
           });
           added++;
-          log(`Added ${r.user.name} (${added} of ${creds.length})`);
+          log(r.locked ? `Added ${r.user.name} (LOCKED - unlock on roblox.com) (${added} of ${creds.length})` : `Added ${r.user.name} (${added} of ${creds.length})`, r.locked ? 'error' : 'info');
           pushAccounts();
         } catch (e) { log(`${username}: login failed: ${e.message}`, 'error'); }
       }
