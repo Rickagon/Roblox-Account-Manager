@@ -19,6 +19,10 @@ class Vault {
   constructor(dir) {
     this.file = path.join(dir, 'accounts.dat');
     this.backup = this.file + '.bak';
+    // Remembers alias/group/notes of removed accounts so they come back if the
+    // same account is added again. Not sensitive (no cookies/passwords).
+    this.tombFile = path.join(dir, 'removed-meta.json');
+    this.tombstones = (() => { try { return JSON.parse(fs.readFileSync(this.tombFile, 'utf8')) || {}; } catch { return {}; } })();
     this.accounts = [];
     this._saveTimer = null;
     this.loadFailed = false;    // true if a file existed but could not be decrypted
@@ -164,6 +168,15 @@ class Vault {
         cookieUpdatedAt: new Date().toISOString(),
         ...data,
       };
+      // Bring back alias/group/notes from a previous removal of this account.
+      const tomb = data.userId && this._tombFor(data.userId);
+      if (tomb) {
+        if (!acc.alias) acc.alias = tomb.alias || '';
+        if (!acc.description) acc.description = tomb.description || '';
+        if (!acc.group || acc.group === 'Default') acc.group = tomb.group || 'Default';
+        delete this.tombstones[data.userId];
+        this._saveTombstones();
+      }
       this.accounts.push(acc);
     }
     // Every account needs a tracker id: it's how launched clients are matched
@@ -182,7 +195,15 @@ class Vault {
     return acc;
   }
 
+  _tombFor(userId) { return this.tombstones[userId] || this.tombstones[String(userId)] || null; }
+  _saveTombstones() { try { fs.writeFileSync(this.tombFile, JSON.stringify(this.tombstones)); } catch { /* ignore */ } }
+
   remove(id) {
+    const acc = this.accounts.find(a => a.id === id);
+    if (acc && acc.userId && (acc.alias || acc.description || (acc.group && acc.group !== 'Default'))) {
+      this.tombstones[acc.userId] = { alias: acc.alias || '', description: acc.description || '', group: acc.group || 'Default' };
+      this._saveTombstones();
+    }
     this.accounts = this.accounts.filter(a => a.id !== id);
     this.save();
   }

@@ -142,9 +142,10 @@ function anyValidClient() {
   return acc ? clientFor(acc) : new RobloxClient('');
 }
 
-async function checkAccount(acc) {
+async function checkAccount(acc, quiet = false) {
   try {
     const user = await clientFor(acc).getAuthenticatedUser();
+    const wasInvalid = acc.valid === false;
     vault.update(acc.id, {
       valid: true,
       userId: user.id,
@@ -152,16 +153,30 @@ async function checkAccount(acc) {
       displayName: user.displayName,
       lastChecked: new Date().toISOString(),
     });
+    if (wasInvalid) log(`${acc.username}: back online`); // recovered (e.g. after unlocking)
     return true;
   } catch (e) {
     if (e.status === 401) {
       vault.update(acc.id, { valid: false, lastChecked: new Date().toISOString() });
-      log(`${acc.username}: session expired, log in again to fix it`, 'error');
+      if (!quiet) log(`${acc.username}: session expired, log in again to fix it`, 'error');
       return false;
     }
-    log(`${acc.username}: check failed (${e.message})`, 'error');
+    if (!quiet) log(`${acc.username}: check failed (${e.message})`, 'error');
     return null;
   }
+}
+
+// Quietly re-check accounts currently marked invalid, so one that recovered
+// (e.g. you unlocked it on roblox.com) flips back to valid on its own instead
+// of being stuck red until a manual "Check sessions".
+async function recheckInvalid() {
+  const invalid = vault.accounts.filter(a => a.cookie && a.valid === false).slice(0, 10);
+  let changed = false;
+  for (const acc of invalid) {
+    if ((await checkAccount(acc, true)) === true) changed = true;
+    await new Promise(r => setTimeout(r, 800));
+  }
+  if (changed) { pushAccounts(); pollPresence(); }
 }
 
 async function refreshAvatars() {
@@ -283,6 +298,7 @@ async function pollPresence() {
 }
 
 let zombieTimer;
+let recheckTimer;
 const seenWithWindow = new Set();   // pids that have had a game window at some point
 const windowlessSince = new Map();  // pid -> when it went windowless after having a window
 const noWindowSince = new Map();    // pid -> first seen with NO window ever (stuck background instance)
@@ -290,6 +306,8 @@ function restartTimers() {
   clearInterval(presenceTimer);
   clearInterval(keepAliveTimer);
   clearInterval(zombieTimer);
+  clearInterval(recheckTimer);
+  recheckTimer = setInterval(recheckInvalid, 150000); // heal recovered accounts every ~2.5 min
   presenceTimer = setInterval(pollPresence, Math.max(3, settings.presenceIntervalSec) * 1000);
   keepAliveTimer = setInterval(() => keepAlive(false), 60 * 60 * 1000);
   // Clean up two kinds of leftover clients: ones that had a game window and
