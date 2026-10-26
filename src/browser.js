@@ -122,6 +122,9 @@ async function login(profilesRoot, { username = '', password = '', window: win }
     } catch { /* not JSON */ }
   });
 
+  const rand = (a, b) => a + Math.floor(Math.random() * (b - a));
+  const sleep = ms => page.waitForTimeout(ms);
+
   // Show only the login card: hide Roblox's nav/header/footer and background so
   // the small window is just the form. Re-applied on every navigation.
   const focusLoginCss = `
@@ -131,8 +134,25 @@ async function login(profilesRoot, { username = '', password = '', window: win }
     #login-container, .login-container, [class*="signupLoginContainer"] { margin:0 auto !important; float:none !important; }
     body { overflow:hidden !important; }`;
   const applyCss = () => page.addStyleTag({ content: focusLoginCss }).catch(() => {});
-  page.on('domcontentloaded', applyCss);
 
+  // Behavioural warm-up: load the real homepage (no CSS hiding) and move the
+  // mouse / scroll like someone browsing, THEN go to login. Roblox's bot check
+  // (Arkose) scores the whole session; a cold session that jumps straight to a
+  // scripted login scores worse than one with human-like activity first.
+  await page.goto('https://www.roblox.com/', { timeout: 120000 }).catch(() => {});
+  try {
+    for (let i = 0; i < rand(4, 7); i++) {
+      await page.mouse.move(rand(80, 820), rand(90, 520), { steps: rand(6, 16) });
+      await sleep(rand(250, 700));
+    }
+    await page.mouse.wheel(0, rand(250, 700)).catch(() => {});
+    await sleep(rand(700, 1500));
+    await page.mouse.wheel(0, -rand(100, 400)).catch(() => {});
+    await sleep(rand(400, 900));
+  } catch { /* best effort */ }
+
+  // Now switch to the login page (and start hiding everything but the form).
+  page.on('domcontentloaded', applyCss);
   await page.goto('https://www.roblox.com/login', { timeout: 120000 }).catch(() => {});
   await applyCss();
 
@@ -146,8 +166,6 @@ async function login(profilesRoot, { username = '', password = '', window: win }
     // form can wipe text typed too early, and fall back to fill() only as a last
     // resort so the account still goes through.)
     const valueOf = sel => page.$eval(sel, el => el.value).catch(() => '');
-    const rand = (a, b) => a + Math.floor(Math.random() * (b - a));
-    const sleep = ms => page.waitForTimeout(ms);
 
     // Paste the value in one shot (like Ctrl+V) instead of typing it. We focus
     // with a real mouse click, clear, then insertText - a single input event,
