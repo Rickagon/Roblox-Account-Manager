@@ -108,8 +108,23 @@ function cookieParam(value) {
  * once the user has signed in, or null if they closed the window.
  */
 async function login(profilesRoot, { username = '', password = '', window: win } = {}) {
-  const profileDir = path.join(profilesRoot, crypto.randomUUID());
-  const ctx = await launch(profileDir, win);
+  // Reuse a PERSISTENT login profile (one per on-screen slot so parallel logins
+  // don't lock the same folder). Keeping it means Arkose's device-reputation
+  // cookies survive between logins, so the "device" builds trust and is served
+  // solvable challenges instead of a cold, hardest-difficulty one every time.
+  // The account itself gets its own fresh profile (profileDir below); the login
+  // profile only exists to log in and carry Arkose's device trust.
+  const slotKey = win && win.x != null ? `${win.x}_${win.y}` : 'main';
+  const loginProfile = path.join(profilesRoot, `_login_${slotKey}`);
+  const profileDir = path.join(profilesRoot, crypto.randomUUID()); // the account's own profile
+  const ctx = await launch(loginProfile, win);
+  // Start signed-out of Roblox, but KEEP Arkose/FunCaptcha cookies (device trust).
+  try {
+    const all = await ctx.cookies();
+    const keep = all.filter(c => /arkose|funcaptcha/i.test(c.domain || ''));
+    await ctx.clearCookies();
+    if (keep.length) await ctx.addCookies(keep);
+  } catch { /* fresh profile, nothing to clear */ }
   const page = ctx.pages()[0] || (await ctx.newPage());
 
   let capturedPassword = '';
