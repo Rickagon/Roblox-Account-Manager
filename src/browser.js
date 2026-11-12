@@ -294,7 +294,7 @@ async function identifyFromPage(ctx) {
  * Opens a logged-in browser for an account. Any cookie Roblox rotates inside
  * the browser is reported back through onCookie so the vault stays current.
  */
-async function openAccount(account, profileDir, onCookie, url = 'https://www.roblox.com/home') {
+async function openAccount(account, profileDir, onCookie, url = 'https://www.roblox.com/home', sites = []) {
   const alreadyOpen = open.has(profileDir);
   const ctx = await launch(profileDir);
 
@@ -309,6 +309,15 @@ async function openAccount(account, profileDir, onCookie, url = 'https://www.rob
   await ctx.addCookies([cookieParam(account.cookie)]);
   const page = ctx.pages()[0] || (await ctx.newPage());
   await page.goto(url, { timeout: 120000 }).catch(() => {});
+
+  // Saved sites (Settings): open each one in its own tab, then return to the main tab.
+  for (const site of sites) {
+    try {
+      const tab = await ctx.newPage();
+      tab.goto(site, { timeout: 120000 }).catch(() => {});
+    } catch { /* window closed meanwhile */ }
+  }
+  if (sites.length) await page.bringToFront().catch(() => {});
 
   let last = account.cookie;
   const sync = async () => {

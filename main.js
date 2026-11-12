@@ -45,6 +45,7 @@ const DEFAULT_SETTINGS = {
   maxActiveClients: 20,
   runOnStartup: false,
   startMinimized: false,
+  pinnedSites: [],
   theme: 'dark',
   autoKeepAlive: true,
   autoKeepAliveDays: 14,
@@ -686,7 +687,7 @@ function registerIpc() {
     await browser.openAccount(acc, acc.profileDir, cookie => {
       vault.update(id, { cookie, cookieUpdatedAt: new Date().toISOString() });
       log(`${acc.username}: saved refreshed cookie from browser`);
-    }, url);
+    }, url, settings.pinnedSites || []);
   });
 
   handle('roblox:arrange', () => launcher.arrangeWindows());

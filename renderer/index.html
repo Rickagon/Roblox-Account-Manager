@@ -174,6 +174,9 @@
     <label class="check"><input type="checkbox" id="s-agingAlert"> Show ⏱ on accounts not launched in 20+ days</label>
     <label class="check"><input type="checkbox" id="s-runOnStartup"> Run when Windows starts (grabs the Multi-Roblox lock before any Roblox opens)</label>
     <label class="check"><input type="checkbox" id="s-startMinimized"> Start hidden in the tray at Windows startup</label>
+    <label>Sites to open in every account browser (one per line)
+      <textarea id="s-pinnedSites" rows="3" placeholder="https://www.roblox.com/trades&#10;https://www.rolimons.com"></textarea>
+    </label>
     <label>Max Roblox clients running at once <input type="number" min="1" max="100" id="s-maxActiveClients"></label>
     <label>Delay between accounts when launching several (seconds) <input type="number" min="0" id="s-joinDelaySec"></label>
     <label>Online status refresh (seconds) <input type="number" min="3" id="s-presenceIntervalSec"></label>
