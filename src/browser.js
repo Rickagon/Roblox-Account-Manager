@@ -107,7 +107,7 @@ function cookieParam(value) {
  * Opens a login window. Resolves with { cookie, password, user, profileDir }
  * once the user has signed in, or null if they closed the window.
  */
-async function login(profilesRoot, { username = '', password = '', window: win } = {}) {
+async function loginAutomated(profilesRoot, { username = '', password = '', window: win } = {}) {
   // Reuse a PERSISTENT login profile (one per on-screen slot so parallel logins
   // don't lock the same folder). Keeping it means Arkose's device-reputation
   // cookies survive between logins, so the "device" builds trust and is served
@@ -333,6 +333,231 @@ async function openAccount(account, profileDir, onCookie, url = 'https://www.rob
 async function closeAll() {
   const ctxs = await Promise.all([...open.values()].map(p => Promise.resolve(p).catch(() => null)));
   await Promise.all(ctxs.filter(Boolean).map(c => c.close().catch(() => {})));
+}
+
+// ---------------------------------------------------------------------------
+// Login in your REAL Chrome (no Playwright). Chrome is started as a normal
+// program with its own profile folder. Nothing is attached to the page while
+// the captcha runs: the app only talks to Chrome's browser-level debugging
+// channel to read cookies (the page can't see that). It briefly attaches to the
+// page only to type saved username/password and to catch the typed password.
+// Falls back to the automated login if Chrome/Edge isn't installed.
+
+function findChrome() {
+  const pf = process.env.PROGRAMFILES || 'C:\\Program Files';
+  const pf86 = process.env['PROGRAMFILES(X86)'] || 'C:\\Program Files (x86)';
+  const local = process.env.LOCALAPPDATA || '';
+  return [
+    path.join(pf, 'Google', 'Chrome', 'Application', 'chrome.exe'),
+    path.join(pf86, 'Google', 'Chrome', 'Application', 'chrome.exe'),
+    path.join(local, 'Google', 'Chrome', 'Application', 'chrome.exe'),
+    path.join(require('os').homedir(), 'AppData', 'Local', 'Google', 'Chrome', 'Application', 'chrome.exe'),
+    path.join(pf86, 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
+    path.join(pf, 'Microsoft', 'Edge', 'Application', 'msedge.exe'),
+  ].find(p => p && fs.existsSync(p)) || null;
+}
+
+function freePort() {
+  return new Promise((resolve, reject) => {
+    const s = require('net').createServer();
+    s.on('error', reject);
+    s.listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => resolve(p)); });
+  });
+}
+
+// Minimal Chrome DevTools Protocol client over a WebSocket.
+function cdpConnect(wsUrl, onEvent = () => {}) {
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(wsUrl);
+    let id = 0;
+    const pending = new Map();
+    ws.onopen = () => resolve({
+      send(method, params = {}, sessionId) {
+        return new Promise((res, rej) => {
+          const i = ++id;
+          pending.set(i, { res, rej });
+          try { ws.send(JSON.stringify({ id: i, method, params, ...(sessionId ? { sessionId } : {}) })); }
+          catch (e) { pending.delete(i); rej(e); }
+        });
+      },
+      close() { try { ws.close(); } catch { /* ignore */ } },
+    });
+    ws.onerror = () => reject(new Error('Could not talk to Chrome'));
+    ws.onmessage = m => {
+      let d; try { d = JSON.parse(m.data); } catch { return; }
+      if (d.id) {
+        const p = pending.get(d.id);
+        if (!p) return;
+        pending.delete(d.id);
+        d.error ? p.rej(new Error(d.error.message)) : p.res(d.result);
+      } else onEvent(d);
+    };
+    ws.onclose = () => { for (const p of pending.values()) p.rej(new Error('closed')); pending.clear(); };
+  });
+}
+
+async function login(profilesRoot, opts = {}) {
+  const exe = findChrome();
+  if (!exe) return loginAutomated(profilesRoot, opts);
+  try {
+    return await loginRealChrome(exe, profilesRoot, opts);
+  } catch (e) {
+    console.error('Real-Chrome login failed, using the built-in browser:', e.message);
+    return loginAutomated(profilesRoot, opts);
+  }
+}
+
+async function loginRealChrome(exe, profilesRoot, { username = '', password = '', window: win } = {}) {
+  const { spawn } = require('child_process');
+  // Persistent login profile per screen slot (keeps Arkose device trust, see loginAutomated).
+  const slotKey = win && win.x != null ? `${win.x}_${win.y}` : 'main';
+  const loginProfile = path.join(profilesRoot, `_chrome_login_${slotKey}`);
+  const profileDir = path.join(profilesRoot, crypto.randomUUID()); // the account's own profile
+  fs.mkdirSync(loginProfile, { recursive: true });
+  disablePasswordPrompts(loginProfile);
+
+  const port = await freePort();
+  const args = [
+    `--user-data-dir=${loginProfile}`,
+    `--remote-debugging-port=${port}`,
+    '--no-first-run', '--no-default-browser-check',
+    `--window-size=${win?.w || 900},${win?.h || 760}`,
+    'about:blank',
+  ];
+  if (win?.x != null && win?.y != null) args.splice(-1, 0, `--window-position=${win.x},${win.y}`);
+  const child = spawn(exe, args, { stdio: 'ignore', windowsHide: false });
+  let exited = false;
+  child.on('exit', () => { exited = true; });
+
+  // Wait for Chrome's browser-level debugging endpoint.
+  let wsUrl = '';
+  for (let i = 0; i < 40 && !wsUrl && !exited; i++) {
+    await new Promise(r => setTimeout(r, 400));
+    try { wsUrl = (await (await fetch(`http://127.0.0.1:${port}/json/version`)).json()).webSocketDebuggerUrl; } catch { /* not up yet */ }
+  }
+  if (!wsUrl) { try { child.kill(); } catch { /* ignore */ } throw new Error('Chrome did not start'); }
+
+  let capturedPassword = '';
+  let pageSession = null;
+  const c = await cdpConnect(wsUrl, ev => {
+    // Catch the password typed into Roblox's login form (sent in the login request).
+    if (ev.method === 'Network.requestWillBeSent') {
+      const rq = ev.params.request;
+      if (rq.method === 'POST' && /auth\.roblox\.com\/v\d\/(login|signup)/.test(rq.url) && rq.postData) {
+        try { const b = JSON.parse(rq.postData); if (b?.password) capturedPassword = b.password; } catch { /* not JSON */ }
+      }
+    }
+  });
+
+  // Start signed-out of Roblox but keep Arkose/FunCaptcha cookies (device trust).
+  try {
+    const { cookies } = await c.send('Storage.getCookies');
+    const keep = cookies.filter(k => /arkose|funcaptcha/i.test(k.domain || ''));
+    await c.send('Storage.clearCookies');
+    if (keep.length) await c.send('Storage.setCookies', { cookies: keep });
+  } catch { /* fresh profile */ }
+
+  // Open the login page in a new tab, then drop the blank start tab.
+  const { targetInfos: before } = await c.send('Target.getTargets');
+  const { targetId } = await c.send('Target.createTarget', { url: 'https://www.roblox.com/login' });
+  for (const t of before) if (t.type === 'page') c.send('Target.closeTarget', { targetId: t.targetId }).catch(() => {});
+
+  // Attach to the login tab only for password capture and (optionally) typing.
+  try {
+    const att = await c.send('Target.attachToTarget', { targetId, flatten: true });
+    pageSession = att.sessionId;
+    await c.send('Network.enable', {}, pageSession);
+  } catch { pageSession = null; }
+
+  if (username && pageSession) fillRealChrome(c, pageSession, username, password).catch(() => {});
+
+  return new Promise(resolve => {
+    let done = false;
+    let tries = 0;
+    const finish = async result => {
+      if (done) return;
+      done = true;
+      clearInterval(timer);
+      if (result) {
+        try { await c.send('Browser.close'); } catch { try { child.kill(); } catch { /* ignore */ } }
+      }
+      c.close();
+      resolve(result);
+    };
+    child.on('exit', () => finish(null)); // user closed the window
+
+    const timer = setInterval(async () => {
+      if (done) return;
+      let cookie = '';
+      try {
+        const { cookies } = await c.send('Storage.getCookies');
+        cookie = cookies.find(k => k.name === COOKIE_NAME && /roblox\.com$/.test(k.domain))?.value || '';
+      } catch { return; }
+      if (!cookie) return;
+      tries++;
+      const pw = capturedPassword || password;
+      try {
+        const user = await new RobloxClient(cookie).getAuthenticatedUser();
+        if (user?.id) return finish({ cookie, password: pw, user, profileDir });
+      } catch { /* 2-step pending or locked */ }
+      // Logged in but /authenticated refused: probably a locked account. Read the
+      // user from the page (the captcha is already done by now).
+      if (tries >= 4 && pageSession) {
+        try {
+          const r = await c.send('Runtime.evaluate', {
+            expression: `(() => { const u = (window.Roblox && Roblox.CurrentUser) || {}; const m = document.querySelector('meta[name="user-data"]');
+              const id = u.userId || (m && m.getAttribute('data-userid')); const name = u.name || u.userName || (m && m.getAttribute('data-name'));
+              return id ? JSON.stringify({ id: Number(id), name: name || '' }) : ''; })()`,
+            returnByValue: true,
+          }, pageSession);
+          const who = r?.result?.value ? JSON.parse(r.result.value) : null;
+          if (who?.id) {
+            if (!who.name) {
+              try { const info = await new RobloxClient('').getUserById(who.id); who.name = info?.name || `User ${who.id}`; who.displayName = info?.displayName; } catch { who.name = `User ${who.id}`; }
+            }
+            finish({ cookie, password: pw, user: { id: who.id, name: who.name, displayName: who.displayName || who.name }, profileDir, locked: true });
+          }
+        } catch { /* page busy */ }
+      }
+    }, 1500);
+  });
+}
+
+// Type saved credentials into the real-Chrome login tab (does not click Log In,
+// so the actual submit is your own click).
+async function fillRealChrome(c, session, username, password) {
+  const val = async sel => {
+    const r = await c.send('Runtime.evaluate', { expression: `document.querySelector(${JSON.stringify(sel)})?.value ?? null`, returnByValue: true }, session);
+    return r?.result?.value;
+  };
+  const put = async (sel, text) => {
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        const { root } = await c.send('DOM.getDocument', { depth: 1 }, session);
+        const { nodeId } = await c.send('DOM.querySelector', { nodeId: root.nodeId, selector: sel }, session);
+        if (nodeId) {
+          await c.send('DOM.focus', { nodeId }, session);
+          if ((await val(sel)) !== text) {
+            await c.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'a', code: 'KeyA', modifiers: 2, windowsVirtualKeyCode: 65 }, session).catch(() => {});
+            await c.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'a', code: 'KeyA', modifiers: 2, windowsVirtualKeyCode: 65 }, session).catch(() => {});
+            await c.send('Input.insertText', { text }, session);
+          }
+          await new Promise(r => setTimeout(r, 250));
+          if ((await val(sel)) === text) return true;
+        }
+      } catch { /* page still loading */ }
+      await new Promise(r => setTimeout(r, 800));
+    }
+    return false;
+  };
+  // Wait for the form to exist (up to ~20s).
+  for (let i = 0; i < 25; i++) {
+    try { if ((await val('#login-username')) !== null) break; } catch { /* loading */ }
+    await new Promise(r => setTimeout(r, 800));
+  }
+  await new Promise(r => setTimeout(r, 1200)); // let React settle so it doesn't wipe the text
+  await put('#login-username', username);
+  if (password) await put('#login-password', password);
 }
 
 module.exports = { login, openAccount, closeAll };
